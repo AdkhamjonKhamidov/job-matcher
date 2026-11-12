@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { categorize, seniority, extractEmails, htmlToText, toIso } from '../server/text.js';
+import { categorize, seniority, extractEmails, htmlToText, toIso, requiredYears, entryHint } from '../server/text.js';
 
 test('categorize sorts tech titles into the right bucket', () => {
   assert.equal(categorize('Service Desk Engineer'), 'helpdesk');
@@ -27,6 +27,23 @@ test('seniority', () => {
   assert.equal(seniority('Software Engineering Intern'), 'intern');
   assert.equal(seniority('Werkstudent Softwareentwicklung'), 'intern');
   assert.equal(seniority('Backend Engineer'), 'mid');
+});
+
+test('requiredYears reads hard requirements and skips preferred ones', () => {
+  assert.equal(requiredYears('Requirements: 5+ years of experience in network administration.'), 5);
+  assert.equal(requiredYears('1-2 years of help desk experience. 4+ years preferred.'), 1);
+  assert.equal(requiredYears('At least three years experience supporting end users'), 3);
+  assert.equal(requiredYears('2+ years in IT support and 6+ years of professional experience'), 6);
+  assert.equal(requiredYears('Founded 25 years ago, we serve 10 years of customers.'), null);
+  assert.equal(requiredYears('No experience required, we will train you.'), null);
+});
+
+test('seniority uses years when the title is silent', () => {
+  assert.equal(seniority('IT Support Specialist', { years: 1 }), 'entry');
+  assert.equal(seniority('Systems Administrator', { years: 5 }), 'senior');
+  assert.equal(seniority('Help Desk Technician', { entryHint: true }), 'entry');
+  assert.equal(seniority('Senior Engineer', { years: 1 }), 'senior');
+  assert.ok(entryHint('This is an entry-level role for recent graduates.'));
 });
 
 test('extractEmails keeps recruiter addresses and drops noise', () => {

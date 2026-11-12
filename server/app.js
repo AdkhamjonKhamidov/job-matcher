@@ -19,6 +19,8 @@ const { aggregate, DEFAULT_BOARDS } = await import('./jobs.js');
 const { listModels, rankModels, tailor } = await import('./gemini.js');
 const { SOURCES } = await import('./sources.js');
 const { clearCache } = await import('./cache.js');
+const { describe } = await import('./describe.js');
+const { requiredYears, entryHint, extractEmails } = await import('./text.js');
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -74,6 +76,17 @@ app.post('/api/cache/clear', async (_req, res) => {
   if (HOSTED) return res.status(403).json({ error: 'The shared job cache cannot be cleared on the hosted version.' });
   await clearCache();
   res.json({ ok: true });
+});
+
+app.post('/api/describe', async (req, res) => {
+  const url = String(req.body?.url || '');
+  if (!/^https?:\/\//i.test(url) || url.length > 2000) return res.status(400).json({ error: 'Missing posting link.' });
+  try {
+    const text = await describe(url);
+    res.json({ text, minYears: requiredYears(text), entryHint: entryHint(text), emails: extractEmails(text) });
+  } catch (err) {
+    res.status(422).json({ error: String(err.message || err).slice(0, 300) });
+  }
 });
 
 const keyFrom = (body) => String(body?.apiKey || process.env.GEMINI_API_KEY || '').trim();

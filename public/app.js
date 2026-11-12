@@ -38,7 +38,8 @@ const state = {
   dismissed: new Set(store.get('dismissed', [])),
   kits: store.get('kits', {}), // jobId -> {kit, at, resumeId, mask}
   jobs: [], sources: [],
-  filters: { q: '', cat: null, level: null, where: 'all', regionOnly: true, hasEmail: false, hideSeen: false, sort: 'new' },
+  filters: { q: '', cat: null, level: null, where: 'all', regionOnly: true, hasEmail: false, hideSeen: false, sort: 'new', entryOnly: store.get('entryOnly', true) },
+  newIds: new Set(), fullText: {}, lastLoaded: 0, loadedDays: store.get('loadedDays', null),
   selectedId: null, tab: 'posting', docTab: 'resume',
   loading: false, tailoring: new Set(),
 };
@@ -130,7 +131,28 @@ function jobSettings() {
   };
 }
 
-async function loadJobs(force = false) {
+// "New" = not seen in any earlier load in this browser. The first ever load marks nothing.
+function markNew(announce, { absorb = false } = {}) {
+  const known = new Set(store.get('knownIds', []));
+  // First ever load, or a wider date window, brings in old postings: remember them without flagging.
+  const firstRun = known.size === 0 || absorb;
+  const fresh = state.jobs.filter((j) => !known.has(j.id));
+  if (!firstRun) for (const j of fresh) state.newIds.add(j.id);
+  if (fresh.length) store.set('knownIds', [...known, ...fresh.map((j) => j.id)].slice(-6000));
+  const visibleNew = fresh.filter((j) => !firstRun && passesLevel(j));
+  if (announce && visibleNew.length) toast(`${visibleNew.length} new ${state.filters.entryOnly ? 'entry-friendly ' : ''}posting${visibleNew.length === 1 ? '' : 's'} found.`);
+  const count = state.jobs.filter((j) => state.newIds.has(j.id) && passesLevel(j)).length;
+  document.title = count ? `(${count}) Job Matcher` : 'Job Matcher';
+}
+
+const AUTO_REFRESH_MS = 20 * 60 * 1000;
+let autoTimer;
+function scheduleAutoRefresh() {
+  clearInterval(autoTimer);
+  autoTimer = setInterval(() => { if (!state.loading && !document.hidden) loadJobs(false, { silent: true }); }, AUTO_REFRESH_MS);
+}
+
+async function loadJobs(force = false, { silent = false } = {}) {
   state.loading = true;
   $('#refreshBtn').classList.add('spin');
   if (!state.jobs.length) {
@@ -139,9 +161,16 @@ async function loadJobs(force = false) {
   }
   try {
     const data = await api('/api/jobs', { settings: jobSettings(), force });
+    for (const j of data.jobs) if (state.fullText[j.id]) applyFullText(j, state.fullText[j.id]);
     state.jobs = data.jobs;
     state.sources = data.sources;
+    state.lastLoaded = Date.now();
+    const widened = state.loadedDays != null && state.settings.maxAgeDays > state.loadedDays;
+    state.loadedDays = Math.max(state.loadedDays ?? 0, state.settings.maxAgeDays);
+    store.set('loadedDays', state.loadedDays);
+    markNew(silent, { absorb: widened });
   } catch (err) {
+    if (silent) return;
     toast(err.message);
     if (!state.jobs.length) {
       $('#jobList').innerHTML = '';
@@ -155,6 +184,11 @@ async function loadJobs(force = false) {
 }
 
 // ---------- filtering ----------
+function passesLevel(j) {
+  if (!state.filters.entryOnly) return true;
+  return j.level !== 'senior' && !(j.minYears != null && j.minYears >= 3);
+}
+
 function baseFiltered(skip) {
   const f = state.filters;
   const q = f.q.trim().toLowerCase();
@@ -162,6 +196,7 @@ function baseFiltered(skip) {
   return state.jobs.filter((j) => {
     if (skip !== 'cat' && f.cat && j.category !== f.cat) return false;
     if (skip !== 'level' && f.level && j.level !== f.level) return false;
+    if (!passesLevel(j)) return false;
     if (f.where === 'remote' && !j.remote) return false;
     if (f.where === 'local' && !isLocal(j)) return false;
     if (f.regionOnly && !(f.where === 'local' && isLocal(j)) && !regionOk(j)) return false;
@@ -221,10 +256,13 @@ function jobRow(j) {
   const kit = state.kits[j.id]?.kit;
   const fit = !kit && skillFit(j);
   const tags = [
+    state.newIds.has(j.id) ? '<span class="tag new">new</span>' : '',
     `<span class="tag cat">${esc(CAT_LABEL[j.category] || j.category)}</span>`,
     j.remote ? '<span class="tag remote">remote</span>' : '',
     j.emails?.length ? '<span class="tag mail">recruiter email</span>' : '',
     kit ? `<span class="tag score">match ${kit.matchScore}</span>` : fit ? `<span class="tag" title="Skills in this posting found in your resume">skills ${fit.have}/${fit.of}</span>` : '',
+    j.minYears != null ? `<span class="tag yrs${j.minYears >= 3 ? ' hi' : ''}" title="Years of experience the posting asks for">needs ${j.minYears}+ yrs</span>` : '',
+    j.level === 'entry' || j.level === 'intern' ? `<span class="tag">${j.level === 'intern' ? 'internship' : 'entry level'}</span>` : '',
     j.salary ? `<span class="tag">${esc(j.salary)}</span>` : '',
   ].join('');
   return `<li class="job${state.dismissed.has(j.id) ? ' dismissed' : ''}" data-id="${esc(j.id)}" role="option" tabindex="-1" aria-selected="${state.selectedId === j.id}">
@@ -244,7 +282,8 @@ function renderFeed() {
   ul.setAttribute('aria-label', 'Job postings');
   $('#feedEmpty').hidden = true;
   const days = state.settings.maxAgeDays;
-  $('#feedCount').innerHTML = `<b>${list.length}</b> postings from the last ${days === 1 ? '24 hours' : `${days} days`}`;
+  const mins = state.lastLoaded ? Math.round((Date.now() - state.lastLoaded) / 60000) : null;
+  $('#feedCount').innerHTML = `<b>${list.length}</b> postings from the last ${days === 1 ? '24 hours' : `${days} days`}${mins != null ? `<span class="refresh-note" title="Checks for new postings every 20 minutes while this tab is open">updated ${mins ? `${mins}m ago` : 'just now'}, auto every 20m</span>` : ''}`;
   if (!list.length && !state.loading) {
     ul.innerHTML = '';
     if (!state.jobs.length) showEmpty('No postings yet', 'Every source came back empty or failed. Check Sources on the left, then press refresh.');
@@ -280,6 +319,39 @@ function select(id, { focusDetail = false } = {}) {
   $('#detail').classList.add('open');
   $('#detail').scrollTop = 0;
   if (focusDetail) $('#detail h2')?.focus();
+  const j = selectedJob();
+  if (j?.needsFullText && !j.fullTextLoaded) loadFullText(j).catch(() => {});
+}
+
+function applyFullText(j, info) {
+  j.description = info.text;
+  j.descriptionIsSnippet = false;
+  j.fullTextLoaded = true;
+  j._skills = undefined;
+  if (info.minYears != null) j.minYears = info.minYears;
+  if (info.emails?.length) j.emails = info.emails;
+}
+
+// Lists like Simplify only carry a title and link; pull the posting text when it's opened.
+const fullTextInflight = {};
+function loadFullText(j) {
+  if (fullTextInflight[j.id]) return fullTextInflight[j.id];
+  j.fullTextState = 'loading';
+  if (state.selectedId === j.id && state.tab === 'posting') renderDetail();
+  fullTextInflight[j.id] = api('/api/describe', { url: j.applyUrl || j.url })
+    .then((info) => {
+      state.fullText[j.id] = info;
+      applyFullText(j, info);
+      j.fullTextState = 'ok';
+    })
+    .catch((err) => { j.fullTextState = 'error'; j.fullTextError = err.message; throw err; })
+    .finally(() => {
+      delete fullTextInflight[j.id];
+      if (state.selectedId === j.id) renderDetail();
+      const li = $(`.job[data-id="${CSS.escape(j.id)}"]`);
+      if (li) li.outerHTML = jobRow(j);
+    });
+  return fullTextInflight[j.id];
 }
 
 function closeDetail() {
@@ -315,7 +387,8 @@ function postingPanel(j) {
   const fit = skillFit(j);
   return `
     <p class="source-note">From <a href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.sourceName)}</a>${j.alsoOn?.length ? `, also on ${esc(j.alsoOn.join(', '))}` : ''}.
-    ${j.descriptionIsSnippet ? ' This board only shares a snippet; open the posting for the full text.' : ''}
+    ${j.fullTextState === 'loading' ? ' Loading the full posting from the company site...' : j.fullTextState === 'error' ? ` Could not load the full posting (${esc(j.fullTextError)}).` : j.descriptionIsSnippet ? ' This board only shares a snippet; open the posting for the full text.' : ''}
+    ${j.minYears != null ? ` Asks for ${j.minYears}+ years of experience.` : ''}
     ${j.emails?.length ? ` Contact in posting: ${j.emails.map((e) => `<b>${esc(e)}</b>`).join(', ')}.` : ''}</p>
     ${fit ? `<p class="source-note">Skills it mentions: ${fit.of}. In your resume: ${fit.have}.${fit.missing.length ? ` Not found: ${esc(fit.missing.slice(0, 10).join(', '))}.` : ''}</p>` : ''}
     <div class="posting">${esc(j.description || 'No description provided.')}</div>`;
@@ -478,6 +551,8 @@ async function tailorJob(j) {
   state.tab = 'kit';
   renderDetail();
   try {
+    // Gemini needs the real posting, not just a title from a list.
+    if (j.needsFullText && !j.fullTextLoaded) await loadFullText(j).catch(() => toast('Could not load the full posting; tailoring from the title only.'));
     const kit = await api('/api/tailor', {
       apiKey: state.settings.geminiKey, model: state.settings.model, tone: state.settings.tone, notes,
       resumeText: text,
@@ -698,6 +773,12 @@ function bind() {
     $$('#whereSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderFacets(); renderFeed();
   });
+  $('#entryOnly').checked = state.filters.entryOnly;
+  $('#entryOnly').addEventListener('change', (e) => {
+    state.filters.entryOnly = e.target.checked;
+    store.set('entryOnly', e.target.checked);
+    renderFacets(); renderFeed(); markNew(false);
+  });
   for (const [id, key] of [['regionOnly', 'regionOnly'], ['hasEmail', 'hasEmail'], ['hideSeen', 'hideSeen']]) {
     $('#' + id).addEventListener('change', (e) => { state.filters[key] = e.target.checked; renderFacets(); renderFeed(); });
   }
@@ -852,6 +933,11 @@ async function init() {
   renderSources();
   // Refresh relative ages every minute without refetching.
   setInterval(() => { if (!state.loading) renderFeed(); }, 60000);
+  scheduleAutoRefresh();
+  // Catch up right away when you come back to a tab that missed refreshes.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !state.loading && Date.now() - state.lastLoaded > AUTO_REFRESH_MS) loadJobs(false, { silent: true });
+  });
   loadJobs();
 }
 

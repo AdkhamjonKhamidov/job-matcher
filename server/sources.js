@@ -133,11 +133,19 @@ export const SOURCES = [
     async fetch({ adzuna, maxAgeDays }) {
       const country = (adzuna.country || 'us').toLowerCase();
       const out = [];
-      for (let page = 1; page <= 3; page++) {
+      // Two passes: newest IT jobs, then a search aimed at entry-level titles.
+      const passes = [
+        ...[1, 2, 3].map((page) => ({ page })),
+        ...[1, 2].map((page) => ({ page, what_or: 'junior entry graduate trainee apprentice associate intern tier1 helpdesk technician' })),
+      ];
+      const exhausted = new Set();
+      for (const { page, what_or } of passes) {
+        if (exhausted.has(what_or || '')) continue;
         const p = new URLSearchParams({
           app_id: adzuna.appId, app_key: adzuna.appKey, results_per_page: '50',
           category: 'it-jobs', sort_by: 'date', max_days_old: String(maxAgeDays), 'content-type': 'application/json',
         });
+        if (what_or) p.set('what_or', what_or);
         if (adzuna.where) {
           p.set('where', adzuna.where);
           p.set('distance', String(Math.round((Number(adzuna.distanceMiles) || 25) * 1.609)));
@@ -153,10 +161,26 @@ export const SOURCES = [
             salary: salaryRange(j.salary_min, j.salary_max), tags: [j.category?.label, j.contract_time].filter(Boolean),
           });
         }
-        if (results.length < 50) break;
+        if (results.length < 50) exhausted.add(what_or || '');
       }
       return out;
     },
+  },
+  {
+    id: 'simplify-newgrad', name: 'New grad lists (Simplify)', home: 'https://github.com/SimplifyJobs/New-Grad-Positions', kind: 'entry', ttl: 2 * HOUR,
+    level: 'entry',
+    async fetch({ maxAgeDays }) {
+      return simplifyFetch('https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json', 'sgrad', maxAgeDays);
+    },
+    cacheKey: ({ maxAgeDays }) => `d${maxAgeDays}`,
+  },
+  {
+    id: 'simplify-intern', name: 'Internship lists (Simplify)', home: 'https://github.com/SimplifyJobs/Summer2026-Internships', kind: 'entry', ttl: 2 * HOUR,
+    level: 'intern',
+    async fetch({ maxAgeDays }) {
+      return simplifyFetch('https://raw.githubusercontent.com/SimplifyJobs/Summer2026-Internships/dev/.github/scripts/listings.json', 'sint', maxAgeDays);
+    },
+    cacheKey: ({ maxAgeDays }) => `d${maxAgeDays}`,
   },
   {
     id: 'greenhouse', name: 'Company boards (Greenhouse)', home: 'https://boards.greenhouse.io', kind: 'company', ttl: HOUR,
@@ -220,6 +244,30 @@ export const SOURCES = [
     },
   },
 ];
+
+// SimplifyJobs' community-maintained lists. Titles and links only; the full posting
+// text is fetched on demand by describe.js when a job is opened.
+async function simplifyFetch(url, prefix, maxAgeDays) {
+  const data = await get(url);
+  const cutoff = Date.now() / 1000 - maxAgeDays * 86400;
+  return (Array.isArray(data) ? data : [])
+    .filter((j) => j.active && j.is_visible !== false && j.date_posted >= cutoff && /^https?:\/\//.test(j.url || ''))
+    .map((j) => {
+      const locs = j.locations || [];
+      const facts = [
+        j.terms?.length ? `Term: ${j.terms.join(', ')}` : '',
+        j.degrees?.length ? `Degrees: ${j.degrees.join(', ')}` : '',
+        j.sponsorship && j.sponsorship !== 'Other' ? `Sponsorship: ${j.sponsorship}` : '',
+        j.category ? `Area: ${j.category}` : '',
+      ].filter(Boolean).join('\n');
+      return {
+        id: `${prefix}-${j.id}`, title: j.title, company: j.company_name, location: locs.slice(0, 3).join(' / ') + (locs.length > 3 ? ` +${locs.length - 3}` : ''),
+        remote: looksRemote(...locs), url: j.url, applyUrl: j.url, postedAt: toIso(j.date_posted),
+        description: facts, descriptionIsSnippet: true, needsFullText: true, salary: '',
+        tags: [j.category, ...(j.terms || [])].filter(Boolean),
+      };
+    });
+}
 
 // Fetch many company boards; one bad slug should not sink the rest.
 async function boardFetch(slugs, fn) {

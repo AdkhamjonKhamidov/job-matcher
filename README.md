@@ -22,10 +22,17 @@ Then:
 |---|---|---|
 | Remotive, Remote OK, Jobicy, Himalayas, We Work Remotely | Remote roles | none |
 | Arbeitnow | Remote + Europe | none |
-| Adzuna | On-site jobs near your city | free key |
+| SimplifyJobs new-grad and internship lists | Entry-level and intern roles at hundreds of companies | none |
+| Adzuna | On-site jobs near your city, plus an entry-level search pass | free key |
 | Greenhouse / Lever / Ashby company boards | Direct from employers' own hiring pages | add company slugs in Settings |
 
 LinkedIn and Indeed are not scraped: both forbid it in their terms and block bots. Instead, each apply kit links to a LinkedIn recruiter search and a LinkedIn job search for that role.
+
+### Entry-level focus
+
+**Entry-friendly only** (on by default) hides senior titles and any posting whose text requires 3+ years of experience. Each posting shows the years it asks for ("needs 2+ yrs"); requirements marked "preferred" are ignored. List sources that only carry a title (Simplify) get their full posting text fetched from the company's job page when you open them or press Tailor (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and Workable through their public APIs, other sites through their structured job data).
+
+While the tab is open it checks for new postings every 20 minutes (and right away when you come back to the tab), tags them **new**, and shows the count in the tab title.
 
 Feeds are cached in `.cache/` (Remotive for 6 hours, as it asks; others for 1 hour). The refresh button forces a new fetch.
 

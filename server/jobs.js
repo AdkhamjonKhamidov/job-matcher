@@ -1,5 +1,5 @@
 import { SOURCES, runSource } from './sources.js';
-import { categorize, seniority, extractEmails, ageDays } from './text.js';
+import { categorize, seniority, extractEmails, ageDays, requiredYears, entryHint } from './text.js';
 
 export const DEFAULT_BOARDS = {
   greenhouse: ['cloudflare', 'gitlab', 'datadog', 'airbnb', 'figma', 'discord'],
@@ -25,7 +25,15 @@ export function normalizeSettings(input = {}) {
   };
 }
 
-const dedupeKey = (j) => `${j.title}|${j.company}`.toLowerCase().replace(/[^a-z0-9|]+/g, '');
+export function enrich(j) {
+  const years = requiredYears(j.description);
+  const titleLevel = seniority(j.title);
+  // Lists that only carry new-grad/intern roles set the level unless the title says senior.
+  const level = j.srcLevel && titleLevel !== 'senior' && titleLevel !== 'intern' ? j.srcLevel : seniority(j.title, { years, entryHint: entryHint(j.description) });
+  return { ...j, level, minYears: years, emails: extractEmails(j.description) };
+}
+
+const dedupeKey =(j) => `${j.title}|${j.company}`.toLowerCase().replace(/[^a-z0-9|]+/g, '');
 
 export async function aggregate(rawSettings, { force = false } = {}) {
   const settings = normalizeSettings(rawSettings);
@@ -36,7 +44,7 @@ export async function aggregate(rawSettings, { force = false } = {}) {
     if (src.enabled && !src.enabled(settings)) return status.push({ ...base, state: 'setup', count: 0 });
     try {
       const { data, fetchedAt, fromCache } = await runSource(src, settings, { force });
-      const jobs = data.map((j) => ({ ...j, source: src.id, sourceName: src.name, sourceHome: src.home }));
+      const jobs = data.map((j) => ({ ...j, source: src.id, sourceName: src.name, sourceHome: src.home, srcLevel: src.level }));
       status.push({ ...base, state: 'ok', fetchedAt, fromCache, total: jobs.length });
       return jobs;
     } catch (err) {
@@ -56,10 +64,13 @@ export async function aggregate(rawSettings, { force = false } = {}) {
     // Keep the copy with the longer description; remember other sources it appeared on.
     if (prev) {
       prev.alsoOn = [...new Set([...(prev.alsoOn || []), j.sourceName])];
-      if ((j.description?.length || 0) > (prev.description?.length || 0) && !j.descriptionIsSnippet) Object.assign(prev, j, { alsoOn: prev.alsoOn });
+      if ((j.description?.length || 0) > (prev.description?.length || 0) && !j.descriptionIsSnippet) {
+        // Keep the entry-list level hint if either copy came from one.
+        Object.assign(prev, enrich({ ...j, category, srcLevel: j.srcLevel || prev.srcLevel }), { alsoOn: prev.alsoOn });
+      }
       continue;
     }
-    seen.set(key, { ...j, category, level: seniority(j.title), emails: extractEmails(j.description) });
+    seen.set(key, enrich({ ...j, category }));
   }
   const jobs = [...seen.values()].sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''));
   for (const s of status) if (s.state === 'ok') s.count = jobs.filter((j) => j.source === s.id).length;
