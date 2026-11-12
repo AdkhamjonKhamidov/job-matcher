@@ -1,0 +1,22 @@
+{
+  "name": "job-matcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local job feed for IT, helpdesk and software roles with Gemini-tailored apply kits.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/archivo": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "express": "^4.22.3",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^4.10.38"
+  }
+}

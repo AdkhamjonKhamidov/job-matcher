@@ -1,0 +1,10 @@
+node_modules/
+.cache/
+.env
+.env.*
+.vercel/
+
+# Local agent playbook and tool config, not part of the app
+main.md
+skills/
+.claude/

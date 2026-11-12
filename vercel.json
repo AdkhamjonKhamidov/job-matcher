@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 300,
+      "includeFiles": "{public/**,node_modules/pdfjs-dist/build/pdf.min.mjs,node_modules/pdfjs-dist/build/pdf.worker.min.mjs,node_modules/mammoth/mammoth.browser.min.js,node_modules/@fontsource/archivo/files/archivo-latin-*-normal.woff2,node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-*-normal.woff2}"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" }
+      ]
+    }
+  ]
+}

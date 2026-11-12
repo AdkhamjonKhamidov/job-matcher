@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Job Matcher</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%231F06AC'/%3E%3Cpath d='M9 22l5-12h4l5 12' stroke='%23E3EF4F' stroke-width='3.2' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/vendor/mammoth/mammoth.browser.min.js" defer></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">JM</span>
+      <div>
+        <h1>Job Matcher</h1>
+        <p class="brand-sub">Fresh tech postings, tailored on your machine</p>
+      </div>
+    </div>
+
+    <fieldset class="fresh" aria-label="Posted within">
+      <legend class="sr-only">Posted within</legend>
+      <span class="fresh-label">Posted within</span>
+      <div class="fresh-track" role="radiogroup">
+        <label><input type="radio" name="age" value="1"><span>24h</span></label>
+        <label><input type="radio" name="age" value="3"><span>3 days</span></label>
+        <label><input type="radio" name="age" value="7" checked><span>7 days</span></label>
+      </div>
+    </fieldset>
+
+    <div class="top-actions">
+      <button class="chip" id="resumeChip" type="button" aria-haspopup="dialog">
+        <span class="dot" id="resumeDot"></span><span id="resumeChipText">Add resume</span>
+      </button>
+      <button class="icon-btn" id="refreshBtn" type="button" title="Fetch fresh postings now">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="sr-only">Refresh jobs</span>
+      </button>
+      <button class="icon-btn" id="settingsBtn" type="button" title="Settings" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span class="sr-only">Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="rail" aria-label="Filters">
+      <label class="search">
+        <span class="sr-only">Search jobs</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="q" type="search" placeholder="Title, company, skill" autocomplete="off">
+      </label>
+
+      <section class="rail-group">
+        <h2>Role</h2>
+        <div id="catList" class="facet"></div>
+      </section>
+
+      <section class="rail-group">
+        <h2>Where</h2>
+        <div class="seg" id="whereSeg">
+          <button type="button" data-v="all" aria-pressed="true">All</button>
+          <button type="button" data-v="remote" aria-pressed="false">Remote</button>
+          <button type="button" data-v="local" aria-pressed="false">Near me</button>
+        </div>
+        <label class="check"><input type="checkbox" id="regionOnly" checked> <span>Open to <b id="countryName">US</b> only</span></label>
+      </section>
+
+      <section class="rail-group">
+        <h2>Level</h2>
+        <div id="levelList" class="facet"></div>
+      </section>
+
+      <section class="rail-group">
+        <label class="check"><input type="checkbox" id="hasEmail"> <span>Has recruiter email</span></label>
+        <label class="check"><input type="checkbox" id="hideSeen"> <span>Hide dismissed</span></label>
+      </section>
+
+      <section class="rail-group sources">
+        <h2>Sources</h2>
+        <ul id="sourceList"></ul>
+      </section>
+    </aside>
+
+    <section class="feed" aria-label="Job postings">
+      <div class="feed-head">
+        <p id="feedCount" aria-live="polite">Loading postings</p>
+        <label class="sort">
+          <span>Sort</span>
+          <select id="sortSel">
+            <option value="new">Newest</option>
+            <option value="match">Best match</option>
+          </select>
+        </label>
+      </div>
+      <ol id="jobList" class="job-list"></ol>
+      <div id="feedEmpty" class="empty" hidden></div>
+    </section>
+
+    <section class="detail" id="detail" aria-label="Job detail" aria-live="polite">
+      <div class="detail-empty">
+        <p class="big">Pick a posting</p>
+        <p>Read it here, then build a tailored apply kit with Gemini: resume, cover letter, recruiter email and LinkedIn note.</p>
+        <p class="kbd-hint">Keys: <kbd>j</kbd> <kbd>k</kbd> move, <kbd>t</kbd> tailor, <kbd>x</kbd> dismiss</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="privacy">
+    <p><b>Private by design.</b> No accounts, analytics, cookies or remote assets. Your resume stays in this browser. The only things that leave your computer: requests to the job sites listed under Sources, and the job + resume text sent to Gemini when you press Tailor (contact details are masked first).</p>
+  </footer>
+
+  <!-- Resume dialog -->
+  <dialog id="resumeDlg" class="dlg" aria-labelledby="resumeTitle">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head">
+        <h2 id="resumeTitle">Your resumes</h2>
+        <button class="icon-btn ghost" value="close" aria-label="Close">&times;</button>
+      </div>
+      <p class="muted">Files are read in this browser only. Only the extracted text is kept, in local storage. Keep a version per track (helpdesk, software) and pick one when tailoring.</p>
+      <label class="drop" id="drop">
+        <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" hidden>
+        <span class="drop-title">Drop a PDF, DOCX or TXT</span>
+        <span class="muted">or click to choose a file</span>
+      </label>
+      <p id="resumeStatus" class="status" role="status"></p>
+      <div class="resume-editor">
+        <div class="row">
+          <label class="field grow"><span>Resume</span>
+            <select id="resumeSel"></select>
+          </label>
+          <label class="field grow"><span>Name</span>
+            <input id="resumeName" placeholder="e.g. Helpdesk resume">
+          </label>
+        </div>
+        <label class="field"><span>Extracted text (fix anything the parser got wrong)</span>
+          <textarea id="resumeText" rows="14" spellcheck="false"></textarea>
+        </label>
+        <div class="row end">
+          <button type="button" class="btn ghost danger" id="resumeDelete">Delete this resume</button>
+          <button type="button" class="btn" id="resumeSave">Save resume</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Settings dialog -->
+  <dialog id="settingsDlg" class="dlg wide" aria-labelledby="settingsTitle">
+    <form method="dialog" class="dlg-inner" id="settingsForm">
+      <div class="dlg-head">
+        <h2 id="settingsTitle">Settings</h2>
+        <button class="icon-btn ghost" value="close" aria-label="Close">&times;</button>
+      </div>
+
+      <section class="set-group">
+        <h3>Gemini</h3>
+        <p class="muted">Get a free key at aistudio.google.com. It is stored only in this browser.</p>
+        <div class="row">
+          <label class="field grow"><span>API key</span><input id="geminiKey" type="password" autocomplete="off" spellcheck="false"></label>
+          <label class="field grow"><span>Model</span>
+            <span class="inline">
+              <select id="geminiModel"><option value="auto">Auto: best available, falls back when busy</option></select>
+              <button type="button" class="btn ghost small" id="loadModels">Check key</button>
+            </span>
+          </label>
+        </div>
+        <p id="modelStatus" class="status" role="status"></p>
+        <div class="row">
+          <label class="field"><span>Tone</span>
+            <select id="tone">
+              <option value="professional and direct">Professional</option>
+              <option value="warm and conversational">Warm</option>
+              <option value="concise and technical">Technical</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="maskContact" checked> <span>Mask my email, phone and links before sending to Gemini</span></label>
+        </div>
+        <label class="field"><span>Standing notes for every application (optional)</span>
+          <textarea id="notes" rows="2" placeholder="e.g. Open to relocating to Austin. CompTIA A+ in progress, expected Jan 2027."></textarea>
+        </label>
+      </section>
+
+      <section class="set-group">
+        <h3>You</h3>
+        <p class="muted">Used for email signatures and to restore masked contact details. Never sent to Gemini.</p>
+        <div class="row">
+          <label class="field grow"><span>Full name</span><input id="pName" autocomplete="name"></label>
+          <label class="field grow"><span>Email</span><input id="pEmail" type="email" autocomplete="email"></label>
+        </div>
+        <div class="row">
+          <label class="field grow"><span>Phone</span><input id="pPhone" autocomplete="tel"></label>
+          <label class="field grow"><span>LinkedIn URL</span><input id="pLinkedin" placeholder="linkedin.com/in/you"></label>
+        </div>
+      </section>
+
+      <section class="set-group">
+        <h3>Location</h3>
+        <p class="muted">Remote boards need nothing. For on-site jobs near you (helpdesk, field IT), add a free Adzuna key from developer.adzuna.com.</p>
+        <div class="row">
+          <label class="field grow"><span>City</span><input id="city" placeholder="e.g. Dallas, TX"></label>
+          <label class="field"><span>Radius (mi)</span><input id="radius" type="number" min="1" max="100" value="25"></label>
+          <label class="field"><span>Country</span>
+            <select id="country">
+              <option value="us">United States</option><option value="ca">Canada</option><option value="gb">United Kingdom</option>
+              <option value="au">Australia</option><option value="de">Germany</option><option value="in">India</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="field grow"><span>Adzuna app ID</span><input id="adzId" autocomplete="off" spellcheck="false"></label>
+          <label class="field grow"><span>Adzuna app key</span><input id="adzKey" type="password" autocomplete="off" spellcheck="false"></label>
+        </div>
+      </section>
+
+      <section class="set-group">
+        <h3>Company boards</h3>
+        <p class="muted">Apply links go straight to the company's own hiring page. Add the slug from their careers URL, comma separated (boards.greenhouse.io/<b>slug</b>, jobs.lever.co/<b>slug</b>, jobs.ashbyhq.com/<b>slug</b>).</p>
+        <label class="field"><span>Greenhouse</span><input id="bGreenhouse" spellcheck="false"></label>
+        <label class="field"><span>Lever</span><input id="bLever" spellcheck="false"></label>
+        <label class="field"><span>Ashby</span><input id="bAshby" spellcheck="false"></label>
+      </section>
+
+      <section class="set-group">
+        <h3>Sources</h3>
+        <div id="sourceToggles" class="toggles"></div>
+      </section>
+
+      <section class="set-group">
+        <h3>Local data</h3>
+        <div class="row">
+          <button type="button" class="btn ghost" id="clearCache">Clear job cache</button>
+          <button type="button" class="btn ghost danger" id="wipeAll">Erase everything stored here</button>
+        </div>
+      </section>
+
+      <div class="dlg-foot">
+        <button type="button" class="btn" id="saveSettings">Save and reload jobs</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

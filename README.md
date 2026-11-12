@@ -1,0 +1,64 @@
+# Job Matcher
+
+A local web app that pulls tech job postings from the last 24 hours to 7 days (helpdesk, IT, software, DevOps, security, data, QA), and uses Gemini to build a tailored apply kit for each one.
+
+## Run it
+
+```bash
+npm install
+npm start
+```
+
+Open http://localhost:4317. The server only listens on 127.0.0.1.
+
+Then:
+1. Click **Add resume** and drop in a PDF, DOCX or TXT. Check the extracted text and fix anything the parser mangled.
+2. Open **Settings**: paste a Gemini API key (free at aistudio.google.com), press **Check key** to pick a model, and add your name/contact for email signatures.
+3. Optional: set your city and a free Adzuna key (developer.adzuna.com) to get on-site jobs near you.
+
+## Where jobs come from
+
+| Source | Covers | Setup |
+|---|---|---|
+| Remotive, Remote OK, Jobicy, Himalayas, We Work Remotely | Remote roles | none |
+| Arbeitnow | Remote + Europe | none |
+| Adzuna | On-site jobs near your city | free key |
+| Greenhouse / Lever / Ashby company boards | Direct from employers' own hiring pages | add company slugs in Settings |
+
+LinkedIn and Indeed are not scraped: both forbid it in their terms and block bots. Instead, each apply kit links to a LinkedIn recruiter search and a LinkedIn job search for that role.
+
+Feeds are cached in `.cache/` (Remotive for 6 hours, as it asks; others for 1 hour). The refresh button forces a new fetch.
+
+## The apply kit
+
+Gemini gets the posting and your resume and returns: a match score with strengths and honest gaps, a tailored resume, a cover letter, a recruiter email, a LinkedIn connection note and message, and likely screening answers. It is told never to invent experience.
+
+"Send it" then:
+- **Apply**: save the tailored resume as PDF, open the real application form, and copy the cover letter to paste in.
+- **Email recruiter**: opens your mail app (or Gmail) with the email filled in. Recruiter addresses found in the posting are pre-filled. You attach the PDF and press send yourself.
+- **LinkedIn**: copies your note and opens a recruiter search at that company.
+
+Nothing is submitted automatically. Employer forms (Workday, Greenhouse, Lever) need logins, CAPTCHAs or per-employer keys, and a human should read every application before it goes out.
+
+## Privacy
+
+- No accounts, analytics, cookies, CDNs or remote images. Fonts and the PDF/DOCX readers are served from `node_modules`.
+- Resume files are parsed in the browser; only the extracted text is kept, in that browser's localStorage. Keys, settings and generated kits live there too. **Settings > Erase everything** clears it.
+- Network traffic: requests to the job sources above, and to Google's Gemini API when you press Tailor. By default your email, phone and LinkedIn/GitHub links are swapped for placeholders before the resume is sent, and restored locally afterwards.
+- You can put `GEMINI_API_KEY` (and `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`) in the environment instead of the browser.
+
+## Hosting on Vercel
+
+The repo deploys to Vercel as-is (`vercel.json` routes everything through `api/index.js`, the same Express app). Differences from running locally:
+
+- Each visitor enters their own Gemini key (and optional Adzuna key) in Settings; it stays in their browser. Server-side `GEMINI_API_KEY`/`ADZUNA_*` env vars are **ignored** on Vercel so a public URL can't spend your quota. Set `ALLOW_SERVER_KEYS=1` only if the deployment is private (for example behind Vercel password protection).
+- Resume text passes through the Vercel function on its way to Gemini. It is not stored or logged.
+- The job cache lives in `/tmp` per function instance, and the refresh button can't force-bypass it.
+
+## Development
+
+```bash
+npm test
+```
+
+`server/` holds the Express server, source adapters (`sources.js`), aggregation and role classification (`jobs.js`, `text.js`), and the Gemini client (`gemini.js`). `public/` is the no-build front end.
