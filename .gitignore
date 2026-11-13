@@ -8,3 +8,4 @@ node_modules/
 main.md
 skills/
 .claude/
+public/vendor/

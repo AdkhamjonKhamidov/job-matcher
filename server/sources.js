@@ -156,6 +156,9 @@ export const SOURCES = [
           out.push({
             id: `adzuna-${j.id}`, title: htmlToText(j.title), company: j.company?.display_name || '',
             location: j.location?.display_name || '', remote: looksRemote(j.title, j.description),
+            // Adzuna gives coordinates and an area path like ["US", "Texas", "Dallas County", "Dallas"].
+            geo: Number.isFinite(j.latitude) ? { lat: j.latitude, lon: j.longitude } : null,
+            area: j.location?.area || [],
             url: j.redirect_url, applyUrl: j.redirect_url, postedAt: toIso(j.created),
             description: htmlToText(j.description), descriptionIsSnippet: true,
             salary: salaryRange(j.salary_min, j.salary_max), tags: [j.category?.label, j.contract_time].filter(Boolean),

@@ -1,5 +1,6 @@
 import { SOURCES, runSource } from './sources.js';
 import { categorize, seniority, extractEmails, ageDays, requiredYears, entryHint } from './text.js';
+import { parseLocation, geocode } from './geo.js';
 
 export const DEFAULT_BOARDS = {
   greenhouse: ['cloudflare', 'gitlab', 'datadog', 'airbnb', 'figma', 'discord'],
@@ -30,7 +31,21 @@ export function enrich(j) {
   const titleLevel = seniority(j.title);
   // Lists that only carry new-grad/intern roles set the level unless the title says senior.
   const level = j.srcLevel && titleLevel !== 'senior' && titleLevel !== 'intern' ? j.srcLevel : seniority(j.title, { years, entryHint: entryHint(j.description) });
-  return { ...j, level, minYears: years, emails: extractEmails(j.description) };
+  return { ...j, level, minYears: years, emails: extractEmails(j.description), ...locate(j) };
+}
+
+// US map points and states for a job. Adzuna supplies coordinates; others are parsed.
+function locate(j) {
+  const { places, states } = parseLocation(j.location);
+  if (j.geo && j.area?.[0] === 'US') {
+    const st = geocode(j.area[1] || '')?.state;
+    const city = j.area.at(-1);
+    if (st) {
+      states.push(st);
+      if (!places.length) places.push({ label: `${city}, ${st}`, lat: +j.geo.lat.toFixed(4), lon: +j.geo.lon.toFixed(4), state: st });
+    }
+  }
+  return { places, states: [...new Set(states)], geo: undefined, area: undefined };
 }
 
 const dedupeKey =(j) => `${j.title}|${j.company}`.toLowerCase().replace(/[^a-z0-9|]+/g, '');

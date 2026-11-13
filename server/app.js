@@ -20,6 +20,7 @@ const { listModels, rankModels, tailor } = await import('./gemini.js');
 const { SOURCES } = await import('./sources.js');
 const { clearCache } = await import('./cache.js');
 const { describe } = await import('./describe.js');
+const { geocode } = await import('./geo.js');
 const { requiredYears, entryHint, extractEmails } = await import('./text.js');
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -50,9 +51,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '2mb' }));
-app.use('/vendor/pdfjs', express.static(path.join(ROOT, 'node_modules/pdfjs-dist/build')));
-app.use('/vendor/mammoth', express.static(path.join(ROOT, 'node_modules/mammoth')));
-app.use('/vendor/fonts', express.static(path.join(ROOT, 'node_modules/@fontsource')));
+// public/vendor is filled from node_modules by scripts/vendor.js (npm postinstall).
 app.use(express.static(path.join(ROOT, 'public')));
 
 app.get('/api/config', (_req, res) => {
@@ -76,6 +75,12 @@ app.post('/api/cache/clear', async (_req, res) => {
   if (HOSTED) return res.status(403).json({ error: 'The shared job cache cannot be cleared on the hosted version.' });
   await clearCache();
   res.json({ ok: true });
+});
+
+app.get('/api/geocode', (req, res) => {
+  const hit = geocode(String(req.query.q || '').slice(0, 100));
+  if (!hit) return res.status(404).json({ error: 'No US place by that name. Try "City, ST" or a ZIP code.' });
+  res.json(hit);
 });
 
 app.post('/api/describe', async (req, res) => {

@@ -41,6 +41,7 @@ const state = {
   filters: { q: '', cat: null, level: null, where: 'all', regionOnly: true, hasEmail: false, hideSeen: false, sort: 'new', entryOnly: store.get('entryOnly', true) },
   newIds: new Set(), fullText: {}, lastLoaded: 0, loadedDays: store.get('loadedDays', null),
   selectedId: null, tab: 'posting', docTab: 'resume',
+  view: store.get('view', 'list'), mapSel: null,
   loading: false, tailoring: new Set(),
 };
 
@@ -86,10 +87,19 @@ function regionOk(job) {
   return false;
 }
 
-function isLocal(job) {
-  if (job.source === 'adzuna') return true;
-  const city = (state.settings.city || '').split(',')[0].trim().toLowerCase();
-  return !job.remote && city.length > 1 && (job.location || '').toLowerCase().includes(city);
+function milesBetween(a, b) {
+  const R = 3958.8, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Does a job sit inside the searched place? Returns the closest distance in miles, or false.
+function inLocation(job, loc) {
+  if (loc.kind === 'state' || loc.radius === 'state') return (job.states || []).includes(loc.state) ? 0 : false;
+  let best = Infinity;
+  for (const p of job.places || []) best = Math.min(best, milesBetween(loc, p));
+  return best <= Number(loc.radius) ? best : false;
 }
 
 // ---------- quick local skill overlap (no AI, no network) ----------
@@ -125,7 +135,12 @@ function jobSettings() {
   const s = state.settings;
   return {
     maxAgeDays: s.maxAgeDays,
-    adzuna: { ...s.adzuna, country: s.country, where: s.city, distanceMiles: s.radius },
+    // A location search also points Adzuna's local search at that place.
+    adzuna: {
+      ...s.adzuna, country: s.country,
+      where: state.filters.loc ? state.filters.loc.label.replace(/\s\d{5}$/, '') : s.city,
+      distanceMiles: state.filters.loc && state.filters.loc.radius !== 'state' ? Number(state.filters.loc.radius) : s.radius,
+    },
     boards: s.boards || state.config?.defaultBoards,
     disabledSources: s.disabledSources,
   };
@@ -198,8 +213,15 @@ function baseFiltered(skip) {
     if (skip !== 'level' && f.level && j.level !== f.level) return false;
     if (!passesLevel(j)) return false;
     if (f.where === 'remote' && !j.remote) return false;
-    if (f.where === 'local' && !isLocal(j)) return false;
-    if (f.regionOnly && !(f.where === 'local' && isLocal(j)) && !regionOk(j)) return false;
+    if (f.where === 'onsite' && j.remote && !(j.places || []).length) return false;
+    let near = false;
+    if (f.loc) {
+      const d = inLocation(j, f.loc);
+      j._dist = d === false ? null : d;
+      near = d !== false;
+      if (!near && !(f.locRemote && j.remote)) return false;
+    }
+    if (f.regionOnly && !near && !(j.places || []).length && !regionOk(j)) return false;
     if (f.hasEmail && !j.emails?.length) return false;
     if (f.hideSeen && state.dismissed.has(j.id)) return false;
     if (terms.length) {
@@ -215,6 +237,9 @@ function filtered() {
   if (state.filters.sort === 'match') {
     const score = (j) => state.kits[j.id]?.kit?.matchScore ?? (() => { const s = skillFit(j); return s ? Math.round((s.have / s.of) * 100) - 1 : -1; })();
     return list.map((j) => [score(j), j]).sort((a, b) => b[0] - a[0]).map(([, j]) => j);
+  }
+  if (state.filters.sort === 'near' && state.filters.loc) {
+    return [...list].sort((a, b) => (a._dist ?? 1e9) - (b._dist ?? 1e9));
   }
   return list;
 }
@@ -258,6 +283,7 @@ function jobRow(j) {
   const tags = [
     state.newIds.has(j.id) ? '<span class="tag new">new</span>' : '',
     `<span class="tag cat">${esc(CAT_LABEL[j.category] || j.category)}</span>`,
+    state.filters.loc && j._dist != null && state.filters.loc.kind === 'point' && state.filters.loc.radius !== 'state' ? `<span class="tag mail">${j._dist < 1 ? '<1' : Math.round(j._dist)} mi</span>` : '',
     j.remote ? '<span class="tag remote">remote</span>' : '',
     j.emails?.length ? '<span class="tag mail">recruiter email</span>' : '',
     kit ? `<span class="tag score">match ${kit.matchScore}</span>` : fit ? `<span class="tag" title="Skills in this posting found in your resume">skills ${fit.have}/${fit.of}</span>` : '',
@@ -284,13 +310,141 @@ function renderFeed() {
   const days = state.settings.maxAgeDays;
   const mins = state.lastLoaded ? Math.round((Date.now() - state.lastLoaded) / 60000) : null;
   $('#feedCount').innerHTML = `<b>${list.length}</b> postings from the last ${days === 1 ? '24 hours' : `${days} days`}${mins != null ? `<span class="refresh-note" title="Checks for new postings every 20 minutes while this tab is open">updated ${mins ? `${mins}m ago` : 'just now'}, auto every 20m</span>` : ''}`;
+  const mapMode = state.view === 'map';
+  ul.hidden = mapMode;
+  $('#mapView').hidden = !mapMode;
+  $('.layout').classList.toggle('map-mode', mapMode);
+  if (mapMode) { renderMap(list); return; }
   if (!list.length && !state.loading) {
     ul.innerHTML = '';
     if (!state.jobs.length) showEmpty('No postings yet', 'Every source came back empty or failed. Check Sources on the left, then press refresh.');
-    else showEmpty('Nothing matches these filters', 'Try "All" under Where, widen to 7 days, or untick "Open to my country only".');
+    else if (state.filters.loc) showEmpty(`Nothing near ${esc(state.filters.loc.label)} yet`, `Try a bigger distance, tick "Also show remote jobs", or widen to 7 days.${state.settings.adzuna?.appId ? '' : ' Adding a free Adzuna key in Settings brings in many more local on-site jobs.'}`);
+    else showEmpty('Nothing matches these filters', 'Try "All" under Where, widen to 7 days, or untick "Open to US only".');
     return;
   }
   ul.innerHTML = list.slice(0, 400).map(jobRow).join('');
+}
+
+// ---------- map (offline: bundled US states shapes + d3-geo, no tiles) ----------
+let mapLib = null;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error(`Could not load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+async function ensureMapLib() {
+  if (mapLib) return mapLib;
+  mapLib = (async () => {
+    await loadScript('/vendor/d3/d3-array.min.js');
+    await loadScript('/vendor/d3/d3-geo.min.js');
+    await loadScript('/vendor/topojson/topojson-client.min.js');
+    const us = await (await fetch('/vendor/us-atlas/states-albers-10m.json')).json();
+    const states = window.topojson.feature(us, us.objects.states).features;
+    const borders = window.topojson.mesh(us, us.objects.states, (a, b) => a !== b);
+    // Same projection us-atlas used to pre-project the shapes.
+    const projection = window.d3.geoAlbersUsa().scale(1300).translate([487.5, 305]);
+    return { states, borders, projection, path: window.d3.geoPath(), projPath: window.d3.geoPath(projection), geoCircle: window.d3.geoCircle };
+  })();
+  mapLib.catch(() => { mapLib = null; });
+  return mapLib;
+}
+
+const STATE_ABBR = { Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', 'District of Columbia': 'DC', Florida: 'FL', Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY', 'Puerto Rico': 'PR' };
+const ABBR_STATE = Object.fromEntries(Object.entries(STATE_ABBR).map(([n, a]) => [a, n]));
+const SHADES = ['var(--surface-2)', '#D7D9FF', '#B9BCFF', '#9FA0FF', '#7E8FF0', '#5882E8'];
+
+async function renderMap(list) {
+  const svg = $('#usMap');
+  let lib;
+  try { lib = await ensureMapLib(); } catch (err) { $('#mapNote').textContent = err.message; return; }
+  if (state.view !== 'map') return;
+
+  // Group postings by city point and by state.
+  const cities = new Map();
+  const byState = new Map();
+  let unplaced = 0;
+  const loc = state.filters.loc;
+  // With a location set, only plot the places inside it (multi-city postings list others too).
+  const inside = (p) => !loc || (loc.kind === 'state' || loc.radius === 'state' ? p.state === loc.state : milesBetween(loc, p) <= Number(loc.radius));
+  for (const j of list) {
+    const pts = (j.places || []).filter(inside);
+    if (!pts.length && !(j.states || []).length) unplaced++;
+    for (const p of pts) {
+      const c = cities.get(p.label) || { ...p, jobs: [] };
+      c.jobs.push(j);
+      cities.set(p.label, c);
+    }
+    for (const st of new Set(loc ? pts.map((p) => p.state) : [...(j.states || []), ...pts.map((p) => p.state)])) {
+      const arr = byState.get(st) || [];
+      arr.push(j);
+      byState.set(st, arr);
+    }
+  }
+  const max = Math.max(1, ...[...byState.values()].map((a) => a.length));
+  const shade = (n) => (n ? SHADES[Math.min(SHADES.length - 1, 1 + Math.floor((Math.log(n) / Math.log(max + 1)) * (SHADES.length - 1)))] : SHADES[0]);
+  const sel = state.mapSel;
+
+  const statePaths = lib.states.map((f) => {
+    const st = STATE_ABBR[f.properties.name];
+    const n = byState.get(st)?.length || 0;
+    return `<path class="state${sel?.type === 'state' && sel.key === st ? ' sel' : ''}" d="${lib.path(f)}" style="fill:${shade(n)}" data-state="${st}"><title>${esc(f.properties.name)}: ${n} posting${n === 1 ? '' : 's'}</title></path>`;
+  }).join('');
+
+  let ring = '';
+  let box = [[0, 0], [975, 610]];
+  if (loc) {
+    const pin = lib.projection([loc.lon, loc.lat]);
+    if (loc.kind === 'point' && loc.radius !== 'state') {
+      const circle = lib.geoCircle().center([loc.lon, loc.lat]).radius(Number(loc.radius) / 69.05)();
+      ring = `<path class="ring" d="${lib.projPath(circle)}"/>`;
+      box = lib.projPath.bounds(circle);
+    } else {
+      const f = lib.states.find((s) => STATE_ABBR[s.properties.name] === loc.state);
+      if (f) box = lib.path.bounds(f);
+    }
+    if (pin) ring += `<circle class="pin" cx="${pin[0].toFixed(1)}" cy="${pin[1].toFixed(1)}" r="5"/>`;
+  }
+  // Zoom to the searched area, keeping the map's aspect ratio and some margin.
+  const pad = 0.35, [[x0, y0], [x1, y1]] = box;
+  let w = (x1 - x0) * (1 + pad * 2), h = (y1 - y0) * (1 + pad * 2);
+  if (w / h > 975 / 610) h = w * 610 / 975; else w = h * 975 / 610;
+  w = Math.min(975, Math.max(w, 160)); h = w * 610 / 975;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const vx = Math.min(975 - w, Math.max(0, cx - w / 2)), vy = Math.min(610 - h, Math.max(0, cy - h / 2));
+  svg.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  const k = 975 / w; // zoom factor: shrink dots and lines so they stay the same size on screen
+  ring = ring.replace('r="5"', `r="${(5 / k).toFixed(2)}"`);
+
+  const dots = [...cities.values()]
+    .map((c) => ({ ...c, xy: lib.projection([c.lon, c.lat]) }))
+    .filter((c) => c.xy)
+    .sort((a, b) => b.jobs.length - a.jobs.length) // big dots underneath small ones
+    .map((c) => `<circle class="dot${sel?.type === 'city' && sel.key === c.label ? ' sel' : ''}" cx="${c.xy[0].toFixed(1)}" cy="${c.xy[1].toFixed(1)}" r="${((3.5 + Math.sqrt(c.jobs.length) * 2.6) / k).toFixed(2)}" data-city="${esc(c.label)}" tabindex="0" role="button" aria-label="${esc(c.label)}: ${c.jobs.length} postings"><title>${esc(c.label)}: ${c.jobs.length} posting${c.jobs.length === 1 ? '' : 's'}</title></circle>`)
+    .join('');
+
+  svg.innerHTML = `<title id="mapTitle">Map of US job postings</title><g>${statePaths}</g><path d="${lib.path(lib.borders)}" style="fill:none;stroke:var(--surface);stroke-width:0.6;pointer-events:none"/>${ring}<g>${dots}</g>`;
+  $('#mapLegend').innerHTML = `<span>fewer</span>${SHADES.slice(1).map((c) => `<i style="background:${c}"></i>`).join('')}<span>more postings per state</span><span style="margin-left:12px">dot size = postings in that city</span>`;
+  const remoteOnly = list.filter((j) => !(j.places || []).length).length;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  $('#mapNote').textContent = `${plural(cities.size, 'city').replace('citys', 'cities')} in ${plural(byState.size, 'state')}. ${remoteOnly ? `${remoteOnly} of these ${list.length} postings are remote or list no US city, so they aren't on the map.` : ''}`;
+
+  // Selected place: list its jobs under the map.
+  let picked = null, title = 'Pick a dot or a state';
+  if (sel?.type === 'city' && cities.get(sel.key)) { picked = cities.get(sel.key).jobs; title = sel.key; }
+  if (sel?.type === 'state' && byState.get(sel.key)) { picked = byState.get(sel.key); title = ABBR_STATE[sel.key] || sel.key; }
+  $('#mapPickTitle').textContent = picked ? `${title}: ${picked.length} posting${picked.length === 1 ? '' : 's'}` : (unplaced === list.length && list.length ? 'None of these postings list a US city' : title);
+  $('#mapJobs').innerHTML = picked ? picked.slice(0, 200).map(jobRow).join('') : '';
+}
+
+function renderLoc() {
+  const loc = state.filters.loc;
+  $('#locChip').hidden = !loc;
+  $('#locRemoteWrap').hidden = !loc;
+  if (loc) $('#locChipText').textContent = loc.kind === 'state' || loc.radius === 'state' ? `In ${loc.kind === 'state' ? loc.label : `${loc.state} (state)`}` : `Within ${loc.radius} mi of ${loc.label}`;
+  const near = $('#sortSel option[value="near"]');
+  if (near) near.disabled = !loc || loc.kind !== 'point';
 }
 
 function renderResumeChip() {
@@ -768,7 +922,6 @@ function bind() {
   $('#levelList').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; state.filters.level = b.dataset.level || null; renderFacets(); renderFeed(); });
   $('#whereSeg').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.v === 'local' && !state.settings.city) { toast('Set your city in Settings to see jobs near you.'); openSettings(); return; }
     state.filters.where = b.dataset.v;
     $$('#whereSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderFacets(); renderFeed();
@@ -785,6 +938,61 @@ function bind() {
   $('#sortSel').addEventListener('change', (e) => { state.filters.sort = e.target.value; renderFeed(); });
 
   $('#jobList').addEventListener('click', (e) => { const li = e.target.closest('.job'); if (li) select(li.dataset.id); });
+  $('#mapJobs').addEventListener('click', (e) => { const li = e.target.closest('.job'); if (li) select(li.dataset.id); });
+
+  // List / map
+  const setView = (v) => {
+    state.view = v;
+    store.set('view', v);
+    $$('#viewSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.view === v)));
+    renderFeed();
+  };
+  $('#viewSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.view); });
+  $$('#viewSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.view === state.view)));
+  const pickOnMap = (target) => {
+    const dot = target.closest('[data-city]');
+    const st = target.closest('[data-state]');
+    if (dot) state.mapSel = { type: 'city', key: dot.dataset.city };
+    else if (st) state.mapSel = { type: 'state', key: st.dataset.state };
+    else return;
+    renderFeed();
+    $('#mapPickTitle').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  $('#usMap').addEventListener('click', (e) => pickOnMap(e.target));
+  $('#usMap').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickOnMap(e.target); } });
+
+  // Location search
+  const locMsg = (msg) => toast(msg);
+  const applyLoc = async (query, radius, { reload = true } = {}) => {
+    const q = query.trim();
+    if (!q) return clearLoc();
+    try {
+      const hit = await api(`/api/geocode?q=${encodeURIComponent(q)}`);
+      state.filters.loc = { ...hit, radius: hit.kind === 'state' ? 'state' : radius };
+      store.set('loc', { q, radius });
+      state.mapSel = null;
+      if (state.filters.sort === 'new' && hit.kind === 'point') { state.filters.sort = 'near'; $('#sortSel').value = 'near'; }
+      renderLoc();
+      renderFacets(); renderFeed();
+      // Local on-site boards (Adzuna) search around the new place.
+      if (reload && state.settings.adzuna?.appId) loadJobs();
+    } catch (err) { locMsg(err.message); }
+  };
+  const clearLoc = () => {
+    state.filters.loc = null;
+    store.set('loc', null);
+    $('#locQ').value = '';
+    if (state.filters.sort === 'near') { state.filters.sort = 'new'; $('#sortSel').value = 'new'; }
+    renderLoc(); renderFacets(); renderFeed();
+    if (state.settings.adzuna?.appId) loadJobs();
+  };
+  $('#locForm').addEventListener('submit', (e) => { e.preventDefault(); applyLoc($('#locQ').value, $('#locRadius').value); });
+  $('#locRadius').addEventListener('change', () => { if (state.filters.loc) applyLoc($('#locQ').value || state.filters.loc.label, $('#locRadius').value); });
+  $('#locClear').addEventListener('click', clearLoc);
+  $('#locRemote').addEventListener('change', (e) => { state.filters.locRemote = e.target.checked; renderFacets(); renderFeed(); });
+  const savedLoc = store.get('loc', null);
+  if (savedLoc?.q) { $('#locQ').value = savedLoc.q; $('#locRadius').value = savedLoc.radius; applyLoc(savedLoc.q, savedLoc.radius, { reload: false }); }
+  else if (state.settings.city) $('#locQ').value = state.settings.city;
 
   $('#refreshBtn').addEventListener('click', () => loadJobs(true));
   $('#settingsBtn').addEventListener('click', openSettings);
@@ -873,8 +1081,9 @@ function bind() {
     if (!r) { r = { id: crypto.randomUUID() }; state.resumes.push(r); state.activeResume = r.id; store.set('activeResume', r.id); }
     Object.assign(r, { name, text, updatedAt: Date.now() });
     store.set('resumes', state.resumes);
-    $('#resumeStatus').className = 'status ok'; $('#resumeStatus').textContent = 'Saved in this browser.';
     fillResumeEditor(); renderAll();
+    $('#resumeDlg').close();
+    toast(`Saved "${name}" in this browser.`);
   });
   $('#resumeDelete').addEventListener('click', () => {
     const r = currentResume(); if (!r || !confirm(`Delete "${r.name}" from this browser?`)) return;

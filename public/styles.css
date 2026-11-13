@@ -181,6 +181,44 @@ kbd { font: 500 12px var(--mono); border: 1px solid var(--line); border-bottom-w
 .tag.yrs { border: 1px solid var(--line); background: transparent; }
 .tag.yrs.hi { border-color: var(--danger); color: var(--danger); }
 .refresh-note { font: 400 12px var(--mono); color: var(--muted); margin-left: var(--s2); }
+/* Location search */
+.loc-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s3); }
+.loc-form select { flex: 1; }
+.loc-form input { flex: 1 1 100%; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 9px; min-height: 38px; }
+.loc-form select { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 0 4px; min-height: 38px; }
+.loc-form .btn { min-height: 38px; padding: 6px 10px; }
+.loc-chip { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); margin-top: var(--s2); padding: 6px 6px 6px 10px; background: var(--indigo); color: #fff; border-radius: var(--r); font-size: 13.5px; }
+.loc-chip button { border: 0; background: transparent; color: var(--lime); font-size: 20px; line-height: 1; cursor: pointer; width: 30px; height: 30px; border-radius: var(--r); }
+.loc-chip button:hover { background: var(--royal); }
+
+/* Map view */
+.view-seg { margin-left: auto; margin-right: var(--s3); }
+.view-seg button { padding: 5px 12px; min-height: 34px; }
+.layout.map-mode { grid-template-columns: 240px minmax(420px, 1.5fr) minmax(360px, 1fr); }
+.map-view { padding: var(--s3) var(--s4) var(--s5); }
+.map-wrap { position: relative; }
+#usMap { width: 100%; height: auto; display: block; }
+#usMap path, #usMap circle { vector-effect: non-scaling-stroke; }
+#usMap .state { stroke: var(--surface); stroke-width: 0.8; cursor: pointer; }
+#usMap .state:hover { stroke: var(--indigo); stroke-width: 1.5; }
+#usMap .state.sel { stroke: var(--indigo); stroke-width: 2.5; }
+#usMap .dot { fill: var(--indigo); stroke: #fff; stroke-width: 1.5; cursor: pointer; }
+#usMap .dot:hover, #usMap .dot:focus-visible { fill: var(--royal); outline: none; stroke: var(--lime); stroke-width: 3; }
+#usMap .dot.sel { fill: var(--lime); stroke: var(--indigo); stroke-width: 2.5; }
+#usMap .ring { fill: var(--lime); fill-opacity: 0.18; stroke: var(--indigo); stroke-dasharray: 4 3; stroke-width: 1.5; pointer-events: none; }
+#usMap .pin { fill: var(--lime); stroke: var(--indigo); stroke-width: 2; pointer-events: none; }
+@media (prefers-color-scheme: dark) {
+  #usMap .dot { fill: var(--lime); stroke: var(--bg); }
+  #usMap .dot.sel { fill: #fff; stroke: var(--lime); }
+  #usMap .state:hover, #usMap .state.sel { stroke: var(--lime); }
+  #usMap .ring { stroke: var(--lime); }
+}
+.map-legend { display: flex; align-items: center; gap: 6px; font: 400 11.5px var(--mono); color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+.map-legend i { display: inline-block; width: 18px; height: 10px; border-radius: 2px; }
+.map-note { font-size: 13px; color: var(--muted); margin: var(--s2) 0 var(--s3); }
+.map-pick h3 { font: 800 17px var(--font); margin: var(--s3) 0 var(--s2); }
+.map-pick .job-list { border-top: 1px solid var(--line); }
+
 .sources ul { list-style: none; margin: 0; padding: 0; font-size: 13px; }
 .sources li { display: flex; justify-content: space-between; gap: var(--s2); padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .sources li a { color: var(--text); text-decoration: none; }
@@ -431,4 +469,13 @@ kbd { font: 500 12px var(--mono); border: 1px solid var(--line); border-bottom-w
 /* Print: only the generated document */
 @media print {
   body > *:not(.print-doc) { display: none !important; }
+}
+
+/* Map mode keeps the normal responsive columns on smaller screens */
+@media (max-width: 1180px) { .layout.map-mode { grid-template-columns: 220px 1fr; } }
+@media (max-width: 760px) {
+  .layout.map-mode { grid-template-columns: 1fr; }
+  .feed-head { flex-wrap: wrap; gap: var(--s2); }
+  .view-seg { margin-left: 0; }
+  .map-view { padding: var(--s2) var(--s3) var(--s4); }
 }

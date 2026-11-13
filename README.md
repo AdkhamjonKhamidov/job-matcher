@@ -34,6 +34,12 @@ LinkedIn and Indeed are not scraped: both forbid it in their terms and block bot
 
 While the tab is open it checks for new postings every 20 minutes (and right away when you come back to the tab), tags them **new**, and shows the count in the tab title.
 
+### Location search and map
+
+Type a city, state or ZIP under **Where** and pick a distance (10 to 100 miles, or the whole state). Postings are matched by distance using the bundled `zipcodes` dataset; sort by **Closest** to see the nearest first. With an Adzuna key, the local on-site search also moves to that place.
+
+**Map** (next to List above the feed) shows the current results on a US map: states shaded by posting count, a dot per city sized by postings. Click a dot or state to list its jobs. The map is drawn from bundled `us-atlas` shapes with `d3-geo`, so it loads no map tiles and contacts no map service. Remote postings and ones without a US city aren't plotted; the note under the map says how many.
+
 Feeds are cached in `.cache/` (Remotive for 6 hours, as it asks; others for 1 hour). The refresh button forces a new fetch.
 
 ## The apply kit

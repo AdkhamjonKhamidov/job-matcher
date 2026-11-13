@@ -63,8 +63,26 @@
         <div class="seg" id="whereSeg">
           <button type="button" data-v="all" aria-pressed="true">All</button>
           <button type="button" data-v="remote" aria-pressed="false">Remote</button>
-          <button type="button" data-v="local" aria-pressed="false">Near me</button>
+          <button type="button" data-v="onsite" aria-pressed="false">On-site</button>
         </div>
+        <form id="locForm" class="loc-form" autocomplete="off">
+          <label class="sr-only" for="locQ">City, state or ZIP</label>
+          <input id="locQ" placeholder="City, state or ZIP" maxlength="80">
+          <label class="sr-only" for="locRadius">Distance</label>
+          <select id="locRadius">
+            <option value="10">10 mi</option>
+            <option value="25" selected>25 mi</option>
+            <option value="50">50 mi</option>
+            <option value="100">100 mi</option>
+            <option value="state">State</option>
+          </select>
+          <button type="submit" class="btn small">Go</button>
+        </form>
+        <div id="locChip" class="loc-chip" hidden>
+          <span id="locChipText"></span>
+          <button type="button" id="locClear" aria-label="Clear location">&times;</button>
+        </div>
+        <label class="check" id="locRemoteWrap" hidden><input type="checkbox" id="locRemote"> <span>Also show remote jobs</span></label>
         <label class="check"><input type="checkbox" id="regionOnly" checked> <span>Open to <b id="countryName">US</b> only</span></label>
       </section>
 
@@ -88,15 +106,33 @@
     <section class="feed" aria-label="Job postings">
       <div class="feed-head">
         <p id="feedCount" aria-live="polite">Loading postings</p>
+        <div class="seg view-seg" id="viewSeg" role="group" aria-label="View">
+          <button type="button" data-view="list" aria-pressed="true">List</button>
+          <button type="button" data-view="map" aria-pressed="false">Map</button>
+        </div>
         <label class="sort">
           <span>Sort</span>
           <select id="sortSel">
             <option value="new">Newest</option>
             <option value="match">Best match</option>
+            <option value="near" disabled>Closest</option>
           </select>
         </label>
       </div>
       <ol id="jobList" class="job-list"></ol>
+      <div id="mapView" class="map-view" hidden>
+        <div class="map-wrap">
+          <svg id="usMap" viewBox="0 0 975 610" role="img" aria-labelledby="mapTitle">
+            <title id="mapTitle">Map of US job postings</title>
+          </svg>
+          <div class="map-legend" id="mapLegend"></div>
+        </div>
+        <p class="map-note" id="mapNote"></p>
+        <div class="map-pick">
+          <h3 id="mapPickTitle">Pick a dot or a state</h3>
+          <ol id="mapJobs" class="job-list" role="listbox" aria-label="Jobs at the selected place"></ol>
+        </div>
+      </div>
       <div id="feedEmpty" class="empty" hidden></div>
     </section>
 
