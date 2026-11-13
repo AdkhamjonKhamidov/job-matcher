@@ -4,7 +4,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 300,
-      "includeFiles": "{public/**,node_modules/pdfjs-dist/build/pdf.min.mjs,node_modules/pdfjs-dist/build/pdf.worker.min.mjs,node_modules/mammoth/mammoth.browser.min.js,node_modules/@fontsource/archivo/files/archivo-latin-*-normal.woff2,node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-*-normal.woff2}"
+      "includeFiles": "{public/**,node_modules/pdfjs-dist/build/*.min.mjs,node_modules/mammoth/*.min.js,node_modules/@fontsource/*/files/*-latin-*-normal.woff2}"
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
