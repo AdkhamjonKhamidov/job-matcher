@@ -11,10 +11,18 @@ npm start
 
 Open http://localhost:4317. The server only listens on 127.0.0.1.
 
-Then:
-1. Click **Add resume** and drop in a PDF, DOCX or TXT. Check the extracted text and fix anything the parser mangled.
-2. Open **Settings**: paste a Gemini API key (free at aistudio.google.com), press **Check key** to pick a model, and add your name/contact for email signatures.
-3. Optional: set your city and a free Adzuna key (developer.adzuna.com) to get on-site jobs near you.
+The first visit walks you through five questions: your resume (PDF, Word or text, read in the browser), the kinds of roles you want, your experience level, remote or near a city, and an optional Gemini key (free at aistudio.google.com/apikey). You can redo them from Settings.
+
+## Pages
+
+| Page | URL | What it's for |
+|---|---|---|
+| Jobs | `/`, `/jobs/:id` | Filtered feed with the posting on the right. Each posting has its own link. |
+| Map | `/map` | The same results on a US map. Click a city dot or state to list its jobs. |
+| Apply | `/apply/:id` | Tailor with Gemini, edit the six documents, then send. |
+| Applications | `/applications` | Every apply kit you've made. |
+| Resume | `/resume` | Upload, edit and switch between resumes. |
+| Settings | `/settings` | Gemini, your details, location and Adzuna, job sources, your data. |
 
 ## Where jobs come from
 
@@ -30,7 +38,7 @@ LinkedIn and Indeed are not scraped: both forbid it in their terms and block bot
 
 ### Entry-level focus
 
-**Entry-friendly only** (on by default) hides senior titles and any posting whose text requires 3+ years of experience. Each posting shows the years it asks for ("needs 2+ yrs"); requirements marked "preferred" are ignored. List sources that only carry a title (Simplify) get their full posting text fetched from the company's job page when you open them or press Tailor (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and Workable through their public APIs, other sites through their structured job data).
+**Level** filters by internship, entry, mid and senior. The levels you pick also cap the experience a posting may ask for: entry hides postings that need 3+ years, mid hides 5+. Each posting shows the years it asks for ("needs 2+ yrs"); requirements marked "preferred" are ignored. List sources that only carry a title (Simplify) get their full posting text fetched from the company's job page when you open them or press Tailor (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and Workable through their public APIs, other sites through their structured job data).
 
 While the tab is open it checks for new postings every 20 minutes (and right away when you come back to the tab), tags them **new**, and shows the count in the tab title.
 
@@ -38,13 +46,13 @@ While the tab is open it checks for new postings every 20 minutes (and right awa
 
 Type a city, state or ZIP under **Where** and pick a distance (10 to 100 miles, or the whole state). Postings are matched by distance using the bundled `zipcodes` dataset; sort by **Closest** to see the nearest first. With an Adzuna key, the local on-site search also moves to that place.
 
-**Map** (next to List above the feed) shows the current results on a US map: states shaded by posting count, a dot per city sized by postings. Click a dot or state to list its jobs. The map is drawn from bundled `us-atlas` shapes with `d3-geo`, so it loads no map tiles and contacts no map service. Remote postings and ones without a US city aren't plotted; the note under the map says how many.
+**Map** (`/map`) shows the current results on a US map: states shaded by posting count, a dot per city sized by postings. Click a dot or state to list its jobs. The map is drawn from bundled `us-atlas` shapes with `d3-geo`, so it loads no map tiles and contacts no map service. Remote postings and ones without a US city aren't plotted; the note under the map says how many.
 
 Feeds are cached in `.cache/` (Remotive for 6 hours, as it asks; others for 1 hour). The refresh button forces a new fetch.
 
 ## The apply kit
 
-Gemini gets the posting and your resume and returns: a match score with strengths and honest gaps, a tailored resume, a cover letter, a recruiter email, a LinkedIn connection note and message, and likely screening answers. It is told never to invent experience.
+Gemini gets the posting and your resume and returns: a match score with strengths and honest gaps, a tailored resume, a cover letter, a recruiter email, a LinkedIn connection note and message, and likely screening answers. It is told never to invent experience, and the server double-checks two things itself: screening answers about work authorization, visas, clearance, relocation, start date or salary are replaced with "answer this yourself" unless your resume or notes say it, and any sign-off Gemini adds to the email is removed so your signature isn't doubled. If the newest Gemini models are busy, it tries two models at a time and works down the list.
 
 "Send it" then:
 - **Apply**: save the tailored resume as PDF, open the real application form, and copy the cover letter to paste in.

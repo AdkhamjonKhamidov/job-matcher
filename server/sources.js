@@ -103,7 +103,7 @@ export const SOURCES = [
           const idx = rawTitle.indexOf(': ');
           const link = tag('link') || tag('guid');
           out.push({
-            id: `wwr-${link}`, company: idx > 0 ? rawTitle.slice(0, idx) : '', title: idx > 0 ? rawTitle.slice(idx + 2) : rawTitle,
+            id: `wwr-${link.split("/").filter(Boolean).pop()}`, company: idx > 0 ? rawTitle.slice(0, idx) : '', title: idx > 0 ? rawTitle.slice(idx + 2) : rawTitle,
             location: tag('region') ? `Remote (${decodeEntities(tag('region'))})` : 'Remote', remote: true,
             url: link, applyUrl: link, postedAt: toIso(tag('pubDate')),
             description: htmlToText(tag('description')), salary: '', tags: [decodeEntities(tag('category'))].filter(Boolean),

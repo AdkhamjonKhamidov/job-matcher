@@ -121,4 +121,11 @@ app.post('/api/tailor', async (req, res) => {
   }
 });
 
+// App pages (/map, /apply/123, /welcome, ...) are client-side routes: serve the shell.
+// Paths with a file extension stay 404 so a missing asset isn't answered with HTML.
+app.get(/^\/(?!api\/)[^.]*$/, (_req, res) => {
+  res.sendFile(path.join(ROOT, 'public', 'index.html'));
+});
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route.' }));
+
 export default app;
