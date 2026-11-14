@@ -23,7 +23,11 @@ export function htmlToText(html = '') {
     .replace(/<\/(p|div|h[1-6]|li|ul|ol|tr|section)>/gi, '\n')
     .replace(/<[^>]+>/g, '');
   s = decodeEntities(s);
-  return s.replace(/[ \t\u00a0]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+  return s.replace(/[ \t\u00a0]+/g, ' ')
+    // "<li><p>Text</p></li>" would leave the bullet alone on its own line.
+    .replace(/\n- *\n+\s*/g, '\n- ')
+    .replace(/(?<=\n- [^\n]*)\n\s*\n+(?=- )/g, '\n')
+    .replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
 }
 
 // Order matters: first match wins, so specific roles come before broad ones.

@@ -54,7 +54,7 @@ export function render(el) {
   const bars = (items, key, total) => items.length ? `<ul class="bars">${items.map((x) => `
     <li class="${x.inResume ? 'b-have' : 'b-miss'}">
       <span class="bar-label">${esc(x[key])}</span>
-      <span class="bar"><i style="width:${Math.max(4, Math.round((x.count / Math.max(1, total)) * 100))}%"></i></span>
+      <span class="bar"><i style="width:${Math.max(4, Math.round((x.count / Math.max(1, items[0].count)) * 100))}%"></i></span>
       <span class="bar-n">${x.count}</span>
       <span class="bar-flag">${x.inResume ? 'on your resume' : 'missing'}</span>
     </li>`).join('')}</ul>` : '<p class="muted">None mentioned yet.</p>';
@@ -142,7 +142,7 @@ export function render(el) {
         </section>
 
         ${generating ? `<section class="card"><h2>Making your plan</h2><div class="loading-bar"></div><p class="muted">Gemini is comparing your resume with these postings. This takes 20 to 90 seconds.</p></section>`
-          : p ? `${planView(p)}<p class="regen"><button type="button" class="btn ghost" data-act="plan" ${hasKey && r ? '' : 'disabled'}>Make a new plan</button> <span class="muted small">Your progress on items with the same name is kept.</span></p>`
+          : p ? `${p.targets.roles !== t.roles || p.targets.level !== t.level ? `<p class="warn-box plan-stale">This plan was made for <b>${esc(p.targets.roles)}</b> (${esc(p.targets.level)}). Your filters now target <b>${esc(t.roles)}</b> (${esc(t.level)}). Make a new plan below to match, or change the filters back on the Jobs page.</p>` : ''}${planView(p)}<p class="regen"><button type="button" class="btn ghost" data-act="plan" ${hasKey && r ? '' : 'disabled'}>Make a new plan</button> <span class="muted small">Your progress on items with the same name is kept.</span></p>`
           : `<section class="card start">
               <h2>Make your plan</h2>
               <p class="muted">Gemini reads your resume and the demand above, then lists projects that prove the skills you're missing, the certifications worth getting first and why, and quick resume fixes. You can check things off as you go.</p>

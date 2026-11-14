@@ -66,8 +66,9 @@ export function unmask(value, map) {
 }
 
 // Render light markdown into a print-only node and open the print dialog (Save as PDF).
-export function printDoc(text, title) {
-  const html = esc(text).split('\n').map((line) => {
+// Light markdown (#, ##, ###, -, **bold**) to safe HTML. Used for preview and PDF.
+export function renderMarkdown(text) {
+  return esc(text).split('\n').map((line) => {
     if (/^# /.test(line)) return `<h1>${line.slice(2)}</h1>`;
     if (/^## /.test(line)) return `<h2>${line.slice(3)}</h2>`;
     if (/^### /.test(line)) return `<h3>${line.slice(4)}</h3>`;
@@ -75,6 +76,10 @@ export function printDoc(text, title) {
     if (!line.trim()) return '<br>';
     return `<p>${line}</p>`;
   }).join('').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(<li>.*?<\/li>)+/g, (m) => `<ul>${m}</ul>`);
+}
+
+export function printDoc(text, title) {
+  const html = renderMarkdown(text);
   const node = document.createElement('div');
   node.className = 'print-doc';
   node.innerHTML = html;

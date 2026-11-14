@@ -3,6 +3,7 @@ import { state, $, $$ } from './core.js';
 
 const routes = [];
 let current = null; // { route, instance }
+let renderToken = 0;
 
 export function route(pattern, load, { title, nav } = {}) {
   routes.push({ pattern, load, title, nav });
@@ -44,10 +45,19 @@ export async function render() {
   el.className = 'page-root';
   $('#view').replaceChildren(el);
   window.scrollTo(0, 0);
+  const token = ++renderToken;
   const mod = await r.load();
+  if (token !== renderToken) return; // a newer navigation or redraw took over
   const instance = mod.render(el, ...params) || null;
   current = { route: r, instance };
   if (r.title) document.title = `${r.title} - Job Matcher`;
+}
+
+// Force a fresh render of the current page (e.g. once server config arrives).
+export function rerender() {
+  current?.instance?.destroy?.();
+  current = null;
+  return render();
 }
 
 export function refresh() {

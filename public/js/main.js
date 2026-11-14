@@ -1,5 +1,5 @@
 import { state, $, api, on } from './core.js';
-import { route, startRouter } from './router.js';
+import { route, startRouter, rerender } from './router.js';
 import { loadJobs, startAutoRefresh } from './data.js';
 
 route(/^\/(?:jobs(?:\/(.+))?)?$/, () => import('./pages/jobs.js'), { title: 'Jobs', nav: 'jobs' });
@@ -23,6 +23,9 @@ async function init() {
   $('#refreshBtn').addEventListener('click', () => loadJobs({ force: true }));
   on('loading', () => $('#refreshBtn').classList.add('spin'));
   on('jobs', () => $('#refreshBtn').classList.remove('spin'));
+  // Draw the page right away; jobs and server config arrive in parallel.
+  startRouter();
+  loadJobs();
   try {
     state.config = await api('/api/config');
   } catch {
@@ -31,8 +34,9 @@ async function init() {
   if (state.config?.hosted) {
     $('#privacyNote').innerHTML = '<b>Private by design.</b> No accounts, analytics, cookies or remote assets. Your resume, keys and kits stay in this browser. When you tailor, the job and your resume text (contact details masked) pass through this site\'s server to Gemini and are not stored. For fully local use, run it with <code>npm start</code>.';
   }
-  startRouter();
-  if (state.config) loadJobs();
+  // Pages that show config-dependent things (server key, source list) redraw once it's here.
+  const page = document.body.dataset.page;
+  if (['settings', 'grow', 'welcome'].includes(page) || location.pathname.startsWith('/apply/')) rerender();
   startAutoRefresh();
 }
 

@@ -18,7 +18,7 @@ export function render(el) {
             <div class="kit-main">
               <a class="kit-title" href="/apply/${encodeURIComponent(id)}" data-link>${esc(j.title)}</a>
               <p class="meta"><b>${esc(j.company || '')}</b>${j.location ? ` · ${esc(j.location)}` : ''}${j.category ? ` · ${esc(CAT_LABEL[j.category] || '')}` : ''}</p>
-              <p class="meta">Made ${a.big} ${a.small === 'ago' ? 'ago' : a.small}${e.to ? ` · recruiter ${esc(e.to)}` : ''}</p>
+              <p class="meta">Made ${a.small === 'ago' ? `${a.big} ago` : a.small}${e.to ? ` · recruiter ${esc(e.to)}` : ''}</p>
             </div>
             <div class="kit-actions">
               <a class="btn small" href="/apply/${encodeURIComponent(id)}" data-link>Open kit</a>

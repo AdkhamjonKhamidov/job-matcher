@@ -1,7 +1,7 @@
 // /apply/:id  -  tailor with Gemini, edit the documents, then send.
 import { state, $, esc, safeUrl, on, emit, api, toast, copy, download, fileSlug, saveKits, currentResume, findJob, store, WORK_AUTH } from '../core.js';
 import { loadFullText } from '../data.js';
-import { maskText, unmask, printDoc } from '../docs.js';
+import { maskText, unmask, printDoc, renderMarkdown } from '../docs.js';
 
 const DOCS = [
   ['resume', 'Resume'], ['coverLetter', 'Cover letter'], ['email', 'Recruiter email'],
@@ -36,6 +36,7 @@ const snapshot = (j) => ({
 });
 
 export function render(el, id) {
+  let preview = true; // documents open formatted; Edit switches to the text box
   const draw = () => {
     const j = findJob(id);
     if (!j) {
@@ -122,11 +123,19 @@ export function render(el, id) {
           <p class="muted small">Made ${esc(new Date(entry.at).toLocaleString())} from "${esc(entry.resumeName || 'resume')}"${k.model ? ` by ${esc(k.model)}` : ''}. <button class="linkish" type="button" data-act="tailor">Make a new version</button></p>
         </aside>
         <section class="doc">
-          <div class="doc-tabs" role="tablist" aria-label="Documents">
-            ${DOCS.map(([d, label]) => `<button type="button" role="tab" data-doc-tab="${d}" aria-selected="${id2 === d}">${label}</button>`).join('')}
+          <div class="doc-bar">
+            <div class="doc-tabs" role="tablist" aria-label="Documents">
+              ${DOCS.map(([d, label]) => `<button type="button" role="tab" data-doc-tab="${d}" aria-selected="${id2 === d}">${label}</button>`).join('')}
+            </div>
+            <div class="seg doc-mode" role="group" aria-label="View">
+              <button type="button" data-mode="preview" aria-pressed="${preview}">Preview</button>
+              <button type="button" data-mode="edit" aria-pressed="${!preview}">Edit</button>
+            </div>
           </div>
-          <label class="sr-only" for="docText">${esc(DOCS.find((d) => d[0] === id2)[1])}</label>
-          <textarea id="docText" spellcheck="true">${esc(text)}</textarea>
+          ${preview
+            ? `<div class="doc-preview" tabindex="0" aria-label="${esc(DOCS.find((d) => d[0] === id2)[1])} preview">${id2 === 'resume' || id2 === 'coverLetter' ? renderMarkdown(text) : `<div class="plain-text">${esc(text)}</div>`}</div>`
+            : `<label class="sr-only" for="docText">${esc(DOCS.find((d) => d[0] === id2)[1])}</label>
+          <textarea id="docText" spellcheck="true">${esc(text)}</textarea>`}
           <div class="doc-actions">
             <span class="count" data-count>${text.length} characters${limit ? ` of ${limit}` : ''}</span>
             <span class="row">
@@ -171,12 +180,13 @@ export function render(el, id) {
   }
 
   el.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-act],[data-doc-tab]');
+    const t = e.target.closest('[data-act],[data-doc-tab],[data-mode]');
     if (!t) return;
     const j = findJob(id);
     const entry = state.kits[id];
-    if (t.dataset.docTab) { state.docTab = t.dataset.docTab; draw(); $('#docText', el)?.focus(); return; }
-    const current = () => $('#docText', el)?.value ?? '';
+    if (t.dataset.docTab) { state.docTab = t.dataset.docTab; draw(); return; }
+    if (t.dataset.mode) { preview = t.dataset.mode === 'preview'; draw(); if (!preview) $('#docText', el)?.focus(); return; }
+    const current = () => $('#docText', el)?.value ?? (entry ? docText(entry, state.docTab) : '');
     switch (t.dataset.act) {
       case 'tailor': tailor(); break;
       case 'copy': copy(current()); break;
