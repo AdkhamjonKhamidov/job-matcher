@@ -1,5 +1,5 @@
 // Markup shared by several pages.
-import { state, esc, safeUrl, age, CAT_LABEL } from './core.js';
+import { state, esc, safeUrl, age, CAT_LABEL, eligibility } from './core.js';
 import { skillFit } from './filters.js';
 
 export function jobRow(j, { selected = false } = {}) {
@@ -16,6 +16,10 @@ export function jobRow(j, { selected = false } = {}) {
     j.minYears != null ? `<span class="tag yrs${j.minYears >= 3 ? ' hi' : ''}" title="Years of experience the posting asks for">needs ${j.minYears}+ yrs</span>` : '',
     kit ? `<span class="tag score">match ${kit.matchScore}</span>` : fit ? `<span class="tag" title="Skills in this posting that appear in your resume">skills ${fit.have}/${fit.of}</span>` : '',
     j.emails?.length ? '<span class="tag mail">recruiter email</span>' : '',
+    j.sector === 'public' ? `<span class="tag" title="${esc(j.company)}">school / gov</span>` : '',
+    j.citizenOnly ? '<span class="tag yrs hi">US citizens only</span>' : '',
+    j.clearance ? '<span class="tag yrs hi">clearance</span>' : '',
+    j.noSponsorship && state.settings.workAuth === 'visa' ? '<span class="tag yrs hi">no sponsorship</span>' : '',
   ].join('');
   return `<li class="job${state.dismissed.has(j.id) ? ' dismissed' : ''}" data-id="${esc(j.id)}" role="option" tabindex="-1" aria-selected="${selected}">
     <div class="age${a.hot ? ' hot' : ''}" title="${esc(j.postedAt || '')}">${a.big}<small>${a.small}</small></div>
@@ -49,10 +53,15 @@ export function postingDetail(j, { back = null } = {}) {
     </div>
     <div class="d-body">
       ${note ? `<p class="source-note">${note}</p>` : ''}
+      ${(() => { const e = eligibility(j); return e.ok ? '' : `<p class="warn-box"><b>You may not be eligible:</b> this posting ${esc(e.reasons.join(' and '))}.</p>`; })()}
       <ul class="facts">
         ${j.minYears != null ? `<li>Asks for <b>${j.minYears}+ years</b> of experience</li>` : ''}
         ${fit ? `<li>Your resume covers <b>${fit.have} of ${fit.of}</b> skills it mentions${fit.missing.length ? `; missing ${esc(fit.missing.slice(0, 8).join(', '))}` : ''}</li>` : ''}
         ${j.emails?.length ? `<li>Contact in posting: ${j.emails.map((e) => `<b>${esc(e)}</b>`).join(', ')}</li>` : ''}
+        ${j.citizenOnly && eligibility(j).ok ? '<li>Requires <b>US citizenship</b></li>' : ''}
+        ${j.clearance && eligibility(j).ok ? '<li>Requires a <b>security clearance</b></li>' : ''}
+        ${j.noSponsorship ? '<li>No visa sponsorship offered</li>' : ''}
+        ${j.sector === 'public' ? `<li>Public employer: <b>${esc(j.company)}</b>. Apply on their own job site.</li>` : ''}
         ${j.alsoOn?.length ? `<li>Also listed on ${esc(j.alsoOn.join(', '))}</li>` : ''}
       </ul>
       <div class="posting">${esc(j.description || 'No description provided.')}</div>

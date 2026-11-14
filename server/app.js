@@ -21,7 +21,8 @@ const { SOURCES } = await import('./sources.js');
 const { clearCache } = await import('./cache.js');
 const { describe } = await import('./describe.js');
 const { geocode } = await import('./geo.js');
-const { requiredYears, entryHint, extractEmails } = await import('./text.js');
+const { makePlan } = await import('./plan.js');
+const { requiredYears, entryHint, extractEmails, workAuth } = await import('./text.js');
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -83,12 +84,24 @@ app.get('/api/geocode', (req, res) => {
   res.json(hit);
 });
 
+app.post('/api/plan', async (req, res) => {
+  const { model, resumeText, targets, demand } = req.body || {};
+  const apiKey = keyFrom(req.body);
+  if (!apiKey) return res.status(400).json({ error: 'Add a Gemini API key in Settings first.' });
+  if (!resumeText || String(resumeText).trim().length < 80) return res.status(400).json({ error: 'Load your resume first (it looks empty).' });
+  try {
+    res.json(await makePlan({ apiKey, model: model || 'auto', resumeText, targets, demand }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.post('/api/describe', async (req, res) => {
   const url = String(req.body?.url || '');
   if (!/^https?:\/\//i.test(url) || url.length > 2000) return res.status(400).json({ error: 'Missing posting link.' });
   try {
     const text = await describe(url);
-    res.json({ text, minYears: requiredYears(text), entryHint: entryHint(text), emails: extractEmails(text) });
+    res.json({ text, minYears: requiredYears(text), entryHint: entryHint(text), emails: extractEmails(text), ...workAuth(text) });
   } catch (err) {
     res.status(422).json({ error: String(err.message || err).slice(0, 300) });
   }

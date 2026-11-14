@@ -4,6 +4,7 @@
 
 import { htmlToText, toIso, looksRemote, decodeEntities } from './text.js';
 import { cached } from './cache.js';
+import { PUBLIC_SOURCES } from './public-sector.js';
 
 const UA = 'job-matcher/1.0 (personal local job reader)';
 const TIMEOUT_MS = 20000;
@@ -246,6 +247,7 @@ export const SOURCES = [
       });
     },
   },
+  ...PUBLIC_SOURCES,
 ];
 
 // SimplifyJobs' community-maintained lists. Titles and links only; the full posting
@@ -266,7 +268,7 @@ async function simplifyFetch(url, prefix, maxAgeDays) {
       return {
         id: `${prefix}-${j.id}`, title: j.title, company: j.company_name, location: locs.slice(0, 3).join(' / ') + (locs.length > 3 ? ` +${locs.length - 3}` : ''),
         remote: looksRemote(...locs), url: j.url, applyUrl: j.url, postedAt: toIso(j.date_posted),
-        description: facts, descriptionIsSnippet: true, needsFullText: true, salary: '',
+        description: facts, descriptionIsSnippet: true, needsFullText: true, salary: '', sponsorship: j.sponsorship || '',
         tags: [j.category, ...(j.terms || [])].filter(Boolean),
       };
     });

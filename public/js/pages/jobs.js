@@ -98,8 +98,23 @@ export function render(el, id) {
   };
   document.addEventListener('keydown', onKey);
 
+  // Quietly read the full text of the top results so citizenship / clearance / years
+  // requirements are known before you open them. Redraw once at the end, not per job.
+  let prefetching = false;
+  const prefetch = async () => {
+    if (prefetching) return;
+    const todo = filtered().filter((j) => j.needsFullText && !j.fullTextLoaded && !j.fullTextState).slice(0, 25);
+    if (!todo.length) return;
+    prefetching = true;
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      while (todo.length && list.isConnected) await loadFullText(todo.shift()).catch(() => {});
+    }));
+    prefetching = false;
+    if (list.isConnected) { drawList(); drawRailOnly(); }
+  };
+
   const offs = [
-    on('jobs', () => { drawAll(); if (state.selectedId) loadFullText(findJob(state.selectedId)).catch(() => {}); }),
+    on('jobs', () => { drawAll(); if (state.selectedId) loadFullText(findJob(state.selectedId)).catch(() => {}); prefetch(); }),
     on('loading', () => { if (!state.jobs.length) drawList(); }),
     on('tick', drawList),
     on('job', (jid) => { if (jid === state.selectedId) drawDetail(); const j = findJob(jid); const li = j && $(`.job[data-id="${CSS.escape(jid)}"]`, list); if (li) li.outerHTML = jobRow(j, { selected: jid === state.selectedId }); }),
@@ -108,6 +123,7 @@ export function render(el, id) {
   state.selectedId = id || null;
   drawAll();
   if (id) select(id);
+  if (state.jobs.length) prefetch();
 
   return {
     update: (newId) => select(newId),

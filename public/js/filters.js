@@ -1,5 +1,5 @@
 // Filtering rules and the filter panel shared by the Jobs and Map pages.
-import { state, $, $$, esc, api, toast, saveFilters, CATS, LEVELS, milesBetween, currentResume, plural } from './core.js';
+import { state, $, $$, esc, api, toast, saveFilters, CATS, LEVELS, milesBetween, currentResume, plural, eligibility } from './core.js';
 import { loadJobs, updateTitle } from './data.js';
 
 // ---------- region / location ----------
@@ -55,6 +55,7 @@ export function passes(j, skip) {
   }
   if (f.regionOnly && !near && !regionOk(j)) return false;
   if (f.hasEmail && !j.emails?.length) return false;
+  if (f.eligibleOnly && !eligibility(j).ok && j.id !== state.selectedId) return false;
   if (f.hideSeen && state.dismissed.has(j.id) && j.id !== state.selectedId) return false;
   const q = f.q.trim().toLowerCase();
   if (q) {
@@ -77,7 +78,7 @@ export function filtered() {
 
 // ---------- quick local skill overlap (no AI, no network) ----------
 const SKILLS = ['active directory', 'azure ad', 'entra', 'office 365', 'microsoft 365', 'm365', 'intune', 'sccm', 'jamf', 'windows', 'macos', 'linux', 'ubuntu', 'powershell', 'bash', 'ticketing', 'servicenow', 'jira', 'zendesk', 'freshservice', 'itil', 'tcp/ip', 'dns', 'dhcp', 'vpn', 'lan', 'wan', 'firewall', 'cisco', 'networking', 'vmware', 'hyper-v', 'citrix', 'comptia', 'a+', 'network+', 'security+', 'ccna', 'printer', 'hardware', 'troubleshooting', 'imaging', 'okta', 'google workspace', 'exchange', 'sharepoint', 'remote desktop', 'javascript', 'typescript', 'react', 'vue', 'angular', 'node', 'next.js', 'python', 'django', 'flask', 'fastapi', 'java', 'spring', 'kotlin', 'swift', 'c#', '.net', 'c++', 'golang', 'rust', 'ruby', 'rails', 'php', 'laravel', 'sql', 'postgres', 'postgresql', 'mysql', 'mongodb', 'redis', 'graphql', 'rest', 'api', 'aws', 'gcp', 'azure', 'docker', 'kubernetes', 'terraform', 'ansible', 'ci/cd', 'github actions', 'jenkins', 'git', 'html', 'css', 'tailwind', 'figma', 'selenium', 'cypress', 'playwright', 'pytest', 'jest', 'spark', 'airflow', 'dbt', 'snowflake', 'pandas', 'tableau', 'power bi', 'excel', 'machine learning', 'pytorch', 'tensorflow', 'llm', 'siem', 'splunk', 'soc', 'incident response', 'vulnerability', 'nist', 'iso 27001', 'agile', 'scrum'];
-const SKILL_RES = SKILLS.map((s) => [s, new RegExp(`(^|[^a-z0-9+#.])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9+#])`, 'i')]);
+export const SKILL_RES = SKILLS.map((s) => [s, new RegExp(`(^|[^a-z0-9+#.])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9+#])`, 'i')]);
 let resumeSkills = null;
 export function skillFit(job) {
   const r = currentResume();
@@ -188,9 +189,11 @@ export function renderRail(el, onChange) {
       ${f.where !== 'onsite' ? `<label class="check"><input type="checkbox" data-f="locRemote" ${f.locRemote ? 'checked' : ''}> <span>Include remote jobs too</span></label>` : ''}` : ''}
     </section>
 
-    <details class="more rail-group" ${f.hasEmail || !f.regionOnly || !f.hideSeen ? 'open' : ''}>
+    <details class="more rail-group" ${f.hasEmail || !f.regionOnly || !f.hideSeen || !f.eligibleOnly || !f.publicOlder ? 'open' : ''}>
       <summary>More filters</summary>
       <label class="check"><input type="checkbox" data-f="regionOnly" ${f.regionOnly ? 'checked' : ''}> <span>Only jobs open to ${esc((REGION[state.settings.country] || REGION.us).name)} applicants</span></label>
+      ${state.settings.workAuth && !['citizen', 'other'].includes(state.settings.workAuth) ? `<label class="check"><input type="checkbox" data-f="eligibleOnly" ${f.eligibleOnly ? 'checked' : ''}> <span>Hide jobs I can't apply for (citizenship${state.settings.workAuth === 'visa' ? ', clearance or no sponsorship' : ' or clearance'})</span></label>` : ''}
+      <label class="check"><input type="checkbox" data-f="publicOlder" ${f.publicOlder ? 'checked' : ''}> <span>Schools and government: show openings up to 30 days old (they stay open longer)</span></label>
       <label class="check"><input type="checkbox" data-f="hasEmail" ${f.hasEmail ? 'checked' : ''}> <span>Has a recruiter email</span></label>
       <label class="check"><input type="checkbox" data-f="hideSeen" ${f.hideSeen ? 'checked' : ''}> <span>Hide jobs I dismissed</span></label>
     </details>
@@ -235,7 +238,7 @@ export function renderRail(el, onChange) {
   });
   el.addEventListener('change', (e) => {
     const k = e.target.dataset.f;
-    if (k && k !== 'q') { state.filters[k] = e.target.checked; changed(); }
+    if (k && k !== 'q') { state.filters[k] = e.target.checked; changed({ reload: k === 'publicOlder' }); }
     if (e.target.id === 'locRadius' && state.filters.loc) submitLoc();
   });
   const submitLoc = async () => {

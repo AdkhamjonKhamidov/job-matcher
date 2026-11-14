@@ -1,5 +1,5 @@
 // /settings
-import { state, $, $$, esc, safeUrl, api, toast, store, saveSettings, on } from '../core.js';
+import { state, $, $$, esc, safeUrl, api, toast, store, saveSettings, on, WORK_AUTH } from '../core.js';
 import { loadJobs } from '../data.js';
 import { navigate } from '../router.js';
 
@@ -61,6 +61,12 @@ export function render(el) {
             <label class="field grow"><span>Phone</span><input data-p="phone" autocomplete="tel" value="${esc(s.profile.phone)}"></label>
             <label class="field grow"><span>LinkedIn URL</span><input data-p="linkedin" placeholder="linkedin.com/in/you" value="${esc(s.profile.linkedin)}"></label>
           </div>
+          <label class="field"><span>Work authorization (hides jobs you can't apply for; Gemini is told this so it answers honestly)</span>
+            <select data-k="workAuth">
+              <option value="" ${!s.workAuth ? 'selected' : ''}>Not set</option>
+              ${Object.entries(WORK_AUTH).map(([v, a]) => `<option value="${v}" ${s.workAuth === v ? 'selected' : ''}>${esc(a.label)}</option>`).join('')}
+            </select>
+          </label>
         </section>
 
         <section class="card" id="location">
@@ -134,7 +140,7 @@ export function render(el) {
     const before = JSON.stringify([s.adzuna, s.boards, s.disabledSources, s.country, s.city]);
     Object.assign(s, {
       geminiKey: v('geminiKey').value.trim(), model: v('model').value, tone: v('tone').value, maskContact: v('maskContact').checked, notes: v('notes').value.trim(),
-      city: v('city').value.trim(), radius: Number(v('radius').value) || 25, country: v('country').value,
+      city: v('city').value.trim(), radius: Number(v('radius').value) || 25, country: v('country').value, workAuth: v('workAuth').value,
       profile: Object.fromEntries($$('[data-p]', el).map((i) => [i.dataset.p, i.value.trim()])),
       adzuna: Object.fromEntries($$('[data-a]', el).map((i) => [i.dataset.a, i.value.trim()])),
       boards: Object.fromEntries($$('[data-b]', el).map((i) => [i.dataset.b, split(i.value)])),

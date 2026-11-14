@@ -11,7 +11,7 @@ npm start
 
 Open http://localhost:4317. The server only listens on 127.0.0.1.
 
-The first visit walks you through five questions: your resume (PDF, Word or text, read in the browser), the kinds of roles you want, your experience level, remote or near a city, and an optional Gemini key (free at aistudio.google.com/apikey). You can redo them from Settings.
+The first visit walks you through six questions: your resume (PDF, Word or text, read in the browser), the kinds of roles you want, your experience level, your US work authorization, remote or near a city, and an optional Gemini key (free at aistudio.google.com/apikey). You can redo them from Settings.
 
 ## Pages
 
@@ -21,6 +21,7 @@ The first visit walks you through five questions: your resume (PDF, Word or text
 | Map | `/map` | The same results on a US map. Click a city dot or state to list its jobs. |
 | Apply | `/apply/:id` | Tailor with Gemini, edit the six documents, then send. |
 | Applications | `/applications` | Every apply kit you've made. |
+| Grow | `/grow` | Projects to build and certifications to get for your target roles, with a tracker. |
 | Resume | `/resume` | Upload, edit and switch between resumes. |
 | Settings | `/settings` | Gemini, your details, location and Adzuna, job sources, your data. |
 
@@ -32,6 +33,8 @@ The first visit walks you through five questions: your resume (PDF, Word or text
 | Arbeitnow | Remote + Europe | none |
 | SimplifyJobs new-grad and internship lists | Entry-level and intern roles at hundreds of companies | none |
 | Adzuna | On-site jobs near your city, plus an entry-level search pass | free key |
+| Maryland schools and colleges: Baltimore County and Harford (Oracle), Howard County and UMD (Workday), Prince George's, Frederick, Carroll, Washington, St. Mary's, Cecil and Talbot (AppliTrack) | School-system and campus IT technician / helpdesk roles | none |
+| Maryland governments: Baltimore, Prince George's, Montgomery, Howard, Anne Arundel and Charles counties (NEOGOV), State of Maryland (JobAps) | Public-sector IT roles | none |
 | Greenhouse / Lever / Ashby company boards | Direct from employers' own hiring pages | add company slugs in Settings |
 
 LinkedIn and Indeed are not scraped: both forbid it in their terms and block bots. Instead, each apply kit links to a LinkedIn recruiter search and a LinkedIn job search for that role.
@@ -41,6 +44,14 @@ LinkedIn and Indeed are not scraped: both forbid it in their terms and block bot
 **Level** filters by internship, entry, mid and senior. The levels you pick also cap the experience a posting may ask for: entry hides postings that need 3+ years, mid hides 5+. Each posting shows the years it asks for ("needs 2+ yrs"); requirements marked "preferred" are ignored. List sources that only carry a title (Simplify) get their full posting text fetched from the company's job page when you open them or press Tailor (Greenhouse, Lever, Ashby, Workday, SmartRecruiters and Workable through their public APIs, other sites through their structured job data).
 
 While the tab is open it checks for new postings every 20 minutes (and right away when you come back to the tab), tags them **new**, and shows the count in the tab title.
+
+### Schools and government
+
+Public employers post on their own hiring systems rather than job boards, so the app reads those systems directly (the list is in `server/public-sector.js`; adding another Oracle, Workday, AppliTrack, NEOGOV or JobAps employer is one line). Their openings stay up for weeks, so by default they're shown for up to 30 days even when the date filter is shorter (More filters turns this off). Montgomery County Public Schools (Taleo), Anne Arundel and Baltimore City schools don't publish a readable feed, so they aren't included.
+
+### Work authorization
+
+Onboarding asks whether you're a US citizen, a green card holder, need visa sponsorship, or prefer not to say. Postings are checked for "must be a US citizen", security clearance and "no sponsorship" wording (and Simplify's own citizenship field). Green card holders don't see citizenship-only or clearance jobs; people who need sponsorship also don't see no-sponsorship jobs. The top results are read in the background so this works before you open them. Gemini is told your status, so it can answer authorization questions honestly and never claims citizenship.
 
 ### Location search and map
 
@@ -60,6 +71,10 @@ Gemini gets the posting and your resume and returns: a match score with strength
 - **LinkedIn**: copies your note and opens a recruiter search at that company.
 
 Nothing is submitted automatically. Employer forms (Workday, Greenhouse, Lever) need logins, CAPTCHAs or per-employer keys, and a human should read every application before it goes out.
+
+## Grow
+
+`/grow` counts which skills and certifications postings for your target roles and level ask for (across the US, last 7 days), marks what your resume already shows, and asks Gemini for a plan specific to those roles: 3 to 5 projects that prove missing skills (free home-lab style, with steps, what to show employers and the resume line to add once done), 2 to 4 certifications in priority order with what each qualifies you for, cost, study time and a study plan, plus quick resume fixes and what to skip for now. Each item has a status and checkable steps, saved in your browser; making a new plan keeps your progress on items with the same name.
 
 ## Privacy
 

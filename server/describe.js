@@ -73,6 +73,14 @@ async function viaAts(u) {
     const j = (data.jobs || []).find((x) => x.id === parts[1]);
     if (j) return j.descriptionPlain || htmlToText(j.descriptionHtml);
   }
+  if (/\.oraclecloud\.com$/.test(host)) {
+    const m = u.pathname.match(/\/sites\/([^/]+)\/job\/(\d+)/);
+    if (m) {
+      const data = await safeFetch(`https://${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById;Id=%22${m[2]}%22,siteNumber=${m[1]}`, { json: true });
+      const j = data.items?.[0] || {};
+      return [j.ExternalDescriptionStr, j.ExternalResponsibilitiesStr, j.ExternalQualificationsStr, j.CorporateDescriptionStr].map((x) => htmlToText(x || '')).filter(Boolean).join('\n\n');
+    }
+  }
   if (host === 'jobs.smartrecruiters.com' && parts.length >= 2) {
     const id = (parts[1].match(/^\d+/) || [])[0];
     if (id) {
@@ -119,7 +127,7 @@ export async function describe(url) {
     let text = null;
     try { text = await viaAts(u); } catch { text = null; }
     if (!text || text.length < 200) text = fromHtml(await safeFetch(url));
-    text = (text || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
+    text = (text || '').replace(/\\r\\n|\\n|\\r/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
     if (text.length < 200) throw new Error('Could not read the posting text (the page may need JavaScript). Open it and paste the description into the job notes.');
     return text;
   });

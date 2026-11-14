@@ -105,26 +105,34 @@ async function availableModels(apiKey) {
   return ids;
 }
 
-async function tryModel(m, apiKey, body, signal, resumeText) {
+async function tryModel(m, apiKey, body, signal, post, label) {
   const t0 = Date.now();
   try {
     const data = await call(`models/${encodeURIComponent(m)}:generateContent`, apiKey, body, ATTEMPT_MS, signal);
-    const kit = guard(parseKit(data), resumeText);
-    console.log(`[tailor] ${m} ok in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    return { ...kit, model: m };
+    const out = post(parseKit(data));
+    console.log(`[${label}] ${m} ok in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    return { ...out, model: m };
   } catch (err) {
-    if (!signal.aborted) console.log(`[tailor] ${m} ${err.status || err.name} after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    if (!signal.aborted) console.log(`[${label}] ${m} ${err.status || err.name} after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
     err.model = m;
     throw err;
   }
 }
 
+export async function tailor({ apiKey, model, resumeText, job, notes, tone }) {
+  return generate({
+    apiKey, model, label: 'tailor', schema: SCHEMA, temperature: 0.5,
+    prompt: buildPrompt({ resumeText, job, notes, tone }),
+    post: (kit) => guard(kit, `${resumeText}\n${notes || ''}`),
+  });
+}
+
 // Busy free-tier models often stall rather than refuse, so race the top two models,
 // keep whichever answers first, cancel the other, then move on to the next pair.
-export async function tailor({ apiKey, model, resumeText, job, notes, tone }) {
+export async function generate({ apiKey, model, prompt, schema, temperature = 0.5, post = (x) => x, label = 'gemini' }) {
   const body = {
-    contents: [{ role: 'user', parts: [{ text: buildPrompt({ resumeText, job, notes, tone }) }] }],
-    generationConfig: { temperature: 0.5, responseMimeType: 'application/json', responseSchema: SCHEMA },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature, responseMimeType: 'application/json', responseSchema: schema },
   };
   const ranked = (await availableModels(apiKey).catch(() => [])).filter((m) => !RETIRED.has(m));
   const first = !model || model === 'auto' || RETIRED.has(model) ? ranked[0] : model;
@@ -135,7 +143,7 @@ export async function tailor({ apiKey, model, resumeText, job, notes, tone }) {
     if (Date.now() - started > 200000) break; // stay inside the hosting time limit
     const ctrl = new AbortController();
     try {
-      const res = await Promise.any(order.slice(i, i + 2).map((m) => tryModel(m, apiKey, body, ctrl.signal, `${resumeText}\n${notes || ''}`)));
+      const res = await Promise.any(order.slice(i, i + 2).map((m) => tryModel(m, apiKey, body, ctrl.signal, post, label)));
       ctrl.abort();
       return res;
     } catch (agg) {
@@ -148,7 +156,7 @@ export async function tailor({ apiKey, model, resumeText, job, notes, tone }) {
       await sleep(500);
     }
   }
-  if (sawBusy) throw new Error('Every Gemini model is busy right now (Google is rate-limiting free keys). Wait a minute and press Tailor again.');
+  if (sawBusy) throw new Error('Every Gemini model is busy right now (Google is rate-limiting free keys). Wait a minute and try again.');
   throw lastErr || new Error('No Gemini model available for this key.');
 }
 

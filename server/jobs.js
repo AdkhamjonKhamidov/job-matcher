@@ -1,5 +1,5 @@
 import { SOURCES, runSource } from './sources.js';
-import { categorize, seniority, extractEmails, ageDays, requiredYears, entryHint } from './text.js';
+import { categorize, seniority, extractEmails, ageDays, requiredYears, entryHint, workAuth } from './text.js';
 import { parseLocation, geocode } from './geo.js';
 
 export const DEFAULT_BOARDS = {
@@ -14,6 +14,9 @@ export function normalizeSettings(input = {}) {
   const boards = input.boards || DEFAULT_BOARDS;
   return {
     maxAgeDays,
+    // Schools and governments keep openings up for weeks; allow older ones from them (0 = same as everything else).
+    publicDays: Math.min(45, Math.max(0, Number(input.publicDays ?? 30) || 0)),
+    publicSector: input.publicSector || null,
     adzuna: {
       appId: String(input.adzuna?.appId || process.env.ADZUNA_APP_ID || '').trim(),
       appKey: String(input.adzuna?.appKey || process.env.ADZUNA_APP_KEY || '').trim(),
@@ -31,12 +34,14 @@ export function enrich(j) {
   const titleLevel = seniority(j.title);
   // Lists that only carry new-grad/intern roles set the level unless the title says senior.
   const level = j.srcLevel && titleLevel !== 'senior' && titleLevel !== 'intern' ? j.srcLevel : seniority(j.title, { years, entryHint: entryHint(j.description) });
-  return { ...j, level, minYears: years, emails: extractEmails(j.description), ...locate(j) };
+  return { ...j, level, minYears: years, emails: extractEmails(j.description), ...workAuth(j.description, j.sponsorship), ...locate(j) };
 }
 
 // US map points and states for a job. Adzuna supplies coordinates; others are parsed.
 function locate(j) {
-  const { places, states } = parseLocation(j.location);
+  let { places, states } = parseLocation(j.location);
+  // Employer-level fallback (a school district's town) when a posting names only a building.
+  if (!places.length && j.placeHint) ({ places, states } = parseLocation(j.placeHint));
   if (j.geo && j.area?.[0] === 'US') {
     const st = geocode(j.area[1] || '')?.state;
     const city = j.area.at(-1);
@@ -71,7 +76,8 @@ export async function aggregate(rawSettings, { force = false } = {}) {
 
   const seen = new Map();
   for (const j of all) {
-    if (!j.title || !j.url || ageDays(j.postedAt) > settings.maxAgeDays) continue;
+    const limit = j.sector === 'public' ? Math.max(settings.maxAgeDays, settings.publicDays) : settings.maxAgeDays;
+    if (!j.title || !j.url || ageDays(j.postedAt) > limit) continue;
     const category = categorize(j.title);
     if (!category) continue;
     const key = dedupeKey(j);

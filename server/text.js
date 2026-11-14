@@ -28,16 +28,35 @@ export function htmlToText(html = '') {
 
 // Order matters: first match wins, so specific roles come before broad ones.
 export const CATEGORIES = [
-  { id: 'helpdesk', label: 'Helpdesk & Support', re: /\b(help ?desk|service ?desk|desktop support|tech(nical)? support|it support|support (technician|engineer)|(it|technical|desktop|application|systems?|computer) support (specialist|analyst)|end[- ]user support|field (service )?tech(nician)?|tier ?(1|2|i|ii)\b|deskside|it technician|computer technician)/i },
-  { id: 'security', label: 'Security', re: /\b(security|cyber|soc analyst|penetration|pentest|infosec|grc analyst|iam engineer)/i },
+  { id: 'helpdesk', label: 'Helpdesk & Support', re: /\b(help ?desk|service ?desk|desktop support|tech(nical)? support|it support|support (technician|engineer)|(it|technical|desktop|application|systems?|computer|user|technology) support (specialist|analyst|technician|associate)|computer user support|end[- ]user support|field (service )?tech(nician)?|tier ?(1|2|i|ii)\b|deskside|it (technician|tech|aide)\b|computer (technician|specialist|operator)|technology (technician|specialist|assistant|aide)|instructional technology (specialist|technician)|school technology|it (associate|apprentice))/i },
+  { id: 'security', label: 'Security', re: /\b(cyber|information security|it security|network security|cloud security|application security|security (analyst|engineer|operations|architect|administrator|specialist)|soc analyst|penetration|pentest|infosec|grc analyst|iam engineer)/i },
   { id: 'devops', label: 'DevOps & Cloud', re: /\b(devops|dev ops|sre\b|site reliability|cloud (engineer|architect|ops)|platform engineer|infrastructure engineer|kubernetes|devsecops)/i },
-  { id: 'it', label: 'IT & Sysadmin', re: /\b(sys(tems)? ?admin|system administrator|systems engineer|network (engineer|administrator|technician|analyst)|it (specialist|administrator|analyst|manager|engineer|coordinator|operations)|m365|microsoft 365|intune|active directory|noc (engineer|technician|analyst)|information technology)/i },
+  { id: 'it', label: 'IT & Sysadmin', re: /\b(sys(tems)? ?admin|system administrator|systems engineer|network (engineer|administrator|technician|analyst|specialist)|it (specialist|administrator|analyst|manager|engineer|coordinator|operations)|\bit (systems?|functional|programmer|infrastructure|network|technical)\b[a-z ,/-]{0,30}(specialist|analyst|technician|engineer|administrator|coordinator)|(?<!automation )(?<!alarm )systems? (specialist|analyst)|m365|microsoft 365|intune|active directory|noc (engineer|technician|analyst)|information technology)/i },
   { id: 'data', label: 'Data & ML', re: /\b(data (engineer|analyst|scientist)|machine learning|ml engineer|ai engineer|analytics engineer|bi (developer|analyst)|mlops|database administrator|\bdba\b)/i },
   { id: 'qa', label: 'QA & Test', re: /\b(qa\b|quality assurance|test (engineer|automation|analyst)|engineer in test|sdet|automation tester|software tester)/i },
-  { id: 'swe', label: 'Software Engineering', re: /\b(software|developer|programmer|engineer(ing)? (i|ii|iii)\b|front[- ]?end|back[- ]?end|full[- ]?stack|web dev|ios|android|mobile (engineer|developer)|swe\b|sde\b|golang|python engineer|java engineer|\.net|react|node(\.js)? engineer|firmware|embedded)/i },
+  { id: 'swe', label: 'Software Engineering', re: /\b(software|developer|programmer|front[- ]?end|back[- ]?end|full[- ]?stack|web dev|ios|android|mobile (engineer|developer)|swe\b|sde\b|golang|python engineer|java engineer|\.net|react|node(\.js)? engineer|firmware|embedded)/i },
 ];
 
+// Who can apply: citizenship, security clearance, and visa sponsorship requirements.
+const CITIZEN_RE = /\b(must be (a )?(u\.?s\.?|united states) citizen|(u\.?s\.?|united states) citizenship (is )?(required|mandatory)|requires? (u\.?s\.?|united states) citizenship|only (u\.?s\.?|united states) citizens|citizenship required|(u\.?s\.?|united states) citizens? only)/i;
+const CLEARANCE_RE = /\b((active|current|existing|must (have|hold|possess|obtain|be able to obtain)|ability to obtain|eligib\w+ (for|to obtain)|requires?)[^.\n]{0,40}\b(secret|top secret|ts\/sci|ts-sci|dod|security) clearance|(secret|top secret|ts\/sci|ts-sci) clearance (is )?(required|needed))/i;
+const NO_SPONSOR_RE = /\b((not|unable to|cannot|can ?not|won'?t|will not|does not|do not|are not able to) (currently )?(provide|offer|support|sponsor)[^.\n]{0,25}sponsor|no (visa |h-?1b )?sponsorship|without (the need for )?(current or future )?(visa )?sponsorship|sponsorship (is )?not (available|offered|provided))/i;
+
+export function workAuth(text = '', sponsorshipField = '') {
+  const t = String(text);
+  const f = String(sponsorshipField || '');
+  return {
+    citizenOnly: CITIZEN_RE.test(t) || /citizenship is required/i.test(f),
+    clearance: CLEARANCE_RE.test(t),
+    noSponsorship: NO_SPONSOR_RE.test(t) || /does not offer sponsorship/i.test(f),
+  };
+}
+
+// Trades and office roles whose titles borrow tech words ("Support Technician", "Systems", "Security").
+const NOT_TECH = /\b(administrative|clerical|records|public works|civil|traffic|transportation|police|officer|lieutenant|sergeant|correctional|custodia\w*|maintenance|facilit\w*|building|hvac|electrician|electronics technician|plumb\w*|fire|nurs\w*|teacher|paraeducator|bus|food|cafeteria|recreation|engineering support|pharmacy|medical|dental|veterinar\w*|laborator\w*|lab technician|automotive|mechanic)\b/i;
+
 export function categorize(title = '') {
+  if (NOT_TECH.test(title) && !/\b(it|information technology|computer|network|help ?desk|service desk|software|cyber|data)\b/i.test(title.replace(new RegExp(NOT_TECH.source, 'gi'), ''))) return null;
   for (const c of CATEGORIES) if (c.re.test(title)) return c.id;
   return null;
 }

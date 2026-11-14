@@ -1,4 +1,4 @@
-// /welcome  -  first-run questions: resume, roles, level, location, Gemini.
+// /welcome  -  first-run questions: resume, roles, level, work authorization, location, Gemini.
 import { state, $, $$, esc, api, store, saveSettings, saveFilters, CATS, currentResume } from '../core.js';
 import { suggestRoles, setLocation, clearLocation } from '../filters.js';
 import { addResumeFromFile, dropZone, bindDrop } from './resume.js';
@@ -10,6 +10,12 @@ const LEVEL_CHOICES = [
   { id: 'entry', title: 'Entry level', body: '0 to 2 years of experience', levels: ['entry'] },
   { id: 'mid', title: 'Some experience', body: '2 to 4 years', levels: ['entry', 'mid'] },
   { id: 'senior', title: 'Experienced', body: '5+ years, show everything', levels: ['mid', 'senior'] },
+];
+const AUTH_CHOICES = [
+  { id: 'citizen', title: 'US citizen', body: 'Can apply anywhere, including clearance jobs' },
+  { id: 'greencard', title: 'Green card holder', body: 'Permanent resident; no sponsorship needed' },
+  { id: 'visa', title: 'Need visa sponsorship', body: 'H-1B, OPT/STEM OPT or similar' },
+  { id: 'other', title: 'Prefer not to say', body: 'Show everything' },
 ];
 const WHERE_CHOICES = [
   { id: 'remote', title: 'Remote only', body: 'Work from home' },
@@ -25,9 +31,11 @@ export function render(el) {
     where: f.where === 'remote' ? 'remote' : f.loc ? (f.where === 'onsite' || !f.locRemote ? 'onsite' : 'both') : 'remote',
     city: f.loc?.q || state.settings.city || '',
     radius: f.loc && f.loc.radius !== 'state' ? f.loc.radius : '25',
+    auth: state.settings.workAuth || '',
   };
   let step = 0, status = '', busy = false;
-  const STEPS = 5;
+  const STEPS = 6;
+  const AUTH = 3, WHERE = 4, GEMINI = 5;
 
   const card = (choice, group, on) => `<button type="button" class="choice" data-${group}="${choice.id}" aria-pressed="${on}"><b>${esc(choice.title)}</b><span>${esc(choice.body)}</span></button>`;
 
@@ -46,6 +54,9 @@ export function render(el) {
     () => `<h1>Where are you in your career?</h1>
       <p class="lead">Jobs asking for more experience than this are hidden. You can change it any time from the filters.</p>
       <div class="choices">${LEVEL_CHOICES.map((c) => card(c, 'level', answers.level === c.id)).join('')}</div>`,
+    () => `<h1>Can you work in the US?</h1>
+      <p class="lead">Some jobs (most federal roles, defense contractors, anything needing a security clearance) are open only to US citizens. We hide the ones you can't apply for and tell Gemini your status, so it never claims something that isn't true.</p>
+      <div class="choices">${AUTH_CHOICES.map((c) => card(c, 'auth', answers.auth === c.id)).join('')}</div>`,
     () => `<h1>Where do you want to work?</h1>
       <p class="lead">Remote roles come from many boards. Jobs near you show up on the map too.</p>
       <div class="choices three">${WHERE_CHOICES.map((c) => card(c, 'where', answers.where === c.id)).join('')}</div>
@@ -63,7 +74,7 @@ export function render(el) {
   ];
 
   const draw = () => {
-    const canNext = step !== 0 || !!currentResume();
+    const canNext = (step !== 0 || !!currentResume()) && (step !== AUTH || !!answers.auth);
     el.innerHTML = `
       <div class="page page-welcome">
         <div class="welcome-card">
@@ -73,7 +84,7 @@ export function render(el) {
           <div class="welcome-nav">
             ${step > 0 ? '<button type="button" class="btn ghost" data-nav="back">Back</button>' : '<span></span>'}
             <div class="row">
-              ${(step === 0 && !currentResume()) || step === 4 ? `<button type="button" class="btn ghost" data-nav="skip">${step === 0 ? 'Skip for now' : 'Skip, add it later'}</button>` : ''}
+              ${(step === 0 && !currentResume()) || step === GEMINI ? `<button type="button" class="btn ghost" data-nav="skip">${step === 0 ? 'Skip for now' : 'Skip, add it later'}</button>` : ''}
               <button type="button" class="btn accent" data-nav="next" ${canNext && !busy ? '' : 'disabled'}>${step === STEPS - 1 ? 'Show my jobs' : 'Continue'}</button>
             </div>
           </div>
@@ -98,7 +109,9 @@ export function render(el) {
     state.filters.where = answers.where === 'remote' ? 'remote' : answers.where === 'onsite' ? 'onsite' : 'all';
     state.filters.locRemote = answers.where === 'both';
     if (answers.where === 'remote') clearLocation({ reload: false });
+    state.filters.eligibleOnly = true;
     saveFilters();
+    state.settings.workAuth = answers.auth;
     state.onboarded = true;
     store.set('onboarded', true);
     saveSettings();
@@ -108,7 +121,7 @@ export function render(el) {
 
   const next = async () => {
     status = '';
-    if (step === 3 && answers.where !== 'remote') {
+    if (step === WHERE && answers.where !== 'remote') {
       answers.city = $('[data-city]', el).value.trim();
       answers.radius = $('[data-radius]', el).value;
       if (!answers.city) { status = '!Type a city, state or ZIP code, or choose Remote only.'; return draw(); }
@@ -120,7 +133,7 @@ export function render(el) {
       } catch (err) { status = `!${err.message}`; busy = false; return draw(); }
       busy = false;
     }
-    if (step === 4) {
+    if (step === GEMINI) {
       const key = $('[data-key]', el).value.trim();
       answers.key = key;
       answers.name = $('[data-name]', el).value.trim();
@@ -143,6 +156,7 @@ export function render(el) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.role) { const i = answers.roles.indexOf(b.dataset.role); i >= 0 ? answers.roles.splice(i, 1) : answers.roles.push(b.dataset.role); b.setAttribute('aria-pressed', String(i < 0)); }
+    else if (b.dataset.auth) { answers.auth = b.dataset.auth; $$('[data-auth]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); $('[data-nav="next"]', el).disabled = false; }
     else if (b.dataset.level) { answers.level = b.dataset.level; $$('[data-level]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }
     else if (b.dataset.where) {
       const c = $('[data-city]', el); if (c) answers.city = c.value;
@@ -150,7 +164,7 @@ export function render(el) {
       $('[data-city]', el)?.focus();
     }
     else if (b.dataset.nav === 'back') { status = ''; step--; draw(); }
-    else if (b.dataset.nav === 'skip') { status = ''; if (step === 4) finish(); else { step++; draw(); } }
+    else if (b.dataset.nav === 'skip') { status = ''; if (step === GEMINI) finish(); else { step++; draw(); } }
     else if (b.dataset.nav === 'next') next();
   });
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); next(); } });

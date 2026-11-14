@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { categorize, seniority, extractEmails, htmlToText, toIso, requiredYears, entryHint } from '../server/text.js';
+import { categorize, seniority, extractEmails, htmlToText, toIso, requiredYears, entryHint, workAuth } from '../server/text.js';
 
 test('categorize sorts tech titles into the right bucket', () => {
   assert.equal(categorize('Service Desk Engineer'), 'helpdesk');
@@ -59,4 +59,29 @@ test('toIso treats zone-less timestamps as UTC and accepts unix seconds', () => 
   assert.equal(toIso('2026-11-10T14:25:05'), '2026-11-10T14:25:05.000Z');
   assert.equal(toIso(1794384008), new Date(1794384008 * 1000).toISOString());
   assert.equal(toIso('garbage'), null);
+});
+
+test('categorize catches government and school IT titles', () => {
+  for (const t of ['IT SYSTEMS TECHNICAL SPECIALIST', '1000 Hour IT Systems Support Technician', 'Technician, IT Support, Field Services', 'COMPUTER USER SUPPORT SPECIALIST I', 'Tier 1 Helpdesk Support (IT Functional Analyst II)', 'Instructional Technology Specialist', 'Technology Technician - Elementary']) {
+    assert.ok(['helpdesk', 'it'].includes(categorize(t)), t);
+  }
+  assert.equal(categorize('Building Automation Systems Technician'), null);
+  assert.equal(categorize('Special Education Teacher'), null);
+});
+
+test('workAuth flags citizenship, clearance and sponsorship requirements', () => {
+  assert.deepEqual(workAuth('Must be a U.S. citizen to be considered.'), { citizenOnly: true, clearance: false, noSponsorship: false });
+  assert.equal(workAuth('Ability to obtain a Secret clearance.').clearance, true);
+  assert.equal(workAuth('We are unable to provide visa sponsorship for this role.').noSponsorship, true);
+  assert.equal(workAuth('Candidates must be authorized to work in the United States.').citizenOnly, false);
+  assert.equal(workAuth('', 'U.S. Citizenship is Required').citizenOnly, true);
+  assert.equal(workAuth('', 'Does Not Offer Sponsorship').noSponsorship, true);
+});
+
+test('categorize skips trades and office roles that borrow tech words', () => {
+  for (const t of ['Security Supervisor- Lieutenant (Transportation)', 'Administrative Support Technician III, Records Evening', 'Engineering Support Technician I - Public Works, Engineering', 'Electronics Technician II – Building Security Services', 'Engineer I, II & III (Proficiency Advancement)', 'Building Automation System Programmer', 'Sr. Fire Alarm Technician']) {
+    assert.equal(categorize(t), null, t);
+  }
+  assert.equal(categorize('IT Support Technician - Facilities Department'), 'helpdesk');
+  assert.equal(categorize('Cyber Security Analyst I'), 'security');
 });

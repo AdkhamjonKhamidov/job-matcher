@@ -1,5 +1,5 @@
 // /apply/:id  -  tailor with Gemini, edit the documents, then send.
-import { state, $, esc, safeUrl, on, emit, api, toast, copy, download, fileSlug, saveKits, currentResume, findJob, store } from '../core.js';
+import { state, $, esc, safeUrl, on, emit, api, toast, copy, download, fileSlug, saveKits, currentResume, findJob, store, WORK_AUTH } from '../core.js';
 import { loadFullText } from '../data.js';
 import { maskText, unmask, printDoc } from '../docs.js';
 
@@ -145,7 +145,7 @@ export function render(el, id) {
     const j = findJob(id);
     const resume = currentResume();
     if (!j || !resume) return;
-    const notes = [state.settings.notes, $('[data-job-notes]', el)?.value].filter(Boolean).join(' ');
+    const notes = [WORK_AUTH[state.settings.workAuth]?.note, state.settings.notes, $('[data-job-notes]', el)?.value].filter(Boolean).join(' ');
     const { text, map } = state.settings.maskContact ? maskText(resume.text) : { text: resume.text, map: {} };
     state.tailoring.add(id);
     draw();

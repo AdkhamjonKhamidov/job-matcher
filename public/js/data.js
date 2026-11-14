@@ -7,6 +7,7 @@ export function jobSettings() {
   const loc = state.filters.loc;
   return {
     maxAgeDays: state.filters.days,
+    publicDays: state.filters.publicOlder ? 30 : 0,
     // A location search also points Adzuna's local search at that place.
     adzuna: {
       ...s.adzuna, country: s.country,
@@ -82,6 +83,8 @@ export function applyFullText(j, info) {
   j._skills = undefined;
   if (info.minYears != null) j.minYears = info.minYears;
   if (info.emails?.length) j.emails = info.emails;
+  // The full text can reveal citizenship / clearance / sponsorship rules the list didn't show.
+  for (const k of ['citizenOnly', 'clearance', 'noSponsorship']) if (info[k]) j[k] = true;
 }
 
 // Lists like Simplify only carry a title and link; fetch the posting text when it's opened.

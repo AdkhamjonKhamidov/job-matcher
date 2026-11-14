@@ -6,6 +6,7 @@ route(/^\/(?:jobs(?:\/(.+))?)?$/, () => import('./pages/jobs.js'), { title: 'Job
 route(/^\/map$/, () => import('./pages/map.js'), { title: 'Map', nav: 'map' });
 route(/^\/apply\/(.+)$/, () => import('./pages/apply.js'), { title: 'Apply', nav: 'applications' });
 route(/^\/applications$/, () => import('./pages/applications.js'), { title: 'Applications', nav: 'applications' });
+route(/^\/grow$/, () => import('./pages/grow.js'), { title: 'Grow', nav: 'grow' });
 route(/^\/resume$/, () => import('./pages/resume.js'), { title: 'Resume', nav: 'resume' });
 route(/^\/settings$/, () => import('./pages/settings.js'), { title: 'Settings', nav: 'settings' });
 route(/^\/welcome$/, () => import('./pages/welcome.js'), { title: 'Welcome', nav: 'welcome' });

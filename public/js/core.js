@@ -24,12 +24,14 @@ const DEFAULT_SETTINGS = {
   geminiKey: '', model: 'auto', tone: 'professional and direct', maskContact: true, notes: '',
   profile: { name: '', email: '', phone: '', linkedin: '' },
   city: '', radius: 25, country: 'us', adzuna: { appId: '', appKey: '' },
+  workAuth: '', // citizen | greencard | visa | other
   boards: null, disabledSources: [],
 };
 
 const DEFAULT_FILTERS = {
   days: 7, roles: [], levels: ['intern', 'entry'], where: 'all', loc: null, locRemote: true,
   regionOnly: true, hasEmail: false, hideSeen: true, sort: 'new',
+  eligibleOnly: true, publicOlder: true,
 };
 
 function loadSettings() {
@@ -65,6 +67,23 @@ export const state = {
   newIds: new Set(), fullText: {}, loadedDays: store.get('loadedDays', null),
   selectedId: null, tailoring: new Set(), mapSel: null, docTab: 'resume',
 };
+
+export const WORK_AUTH = {
+  citizen: { label: 'US citizen', note: 'Work authorization: U.S. citizen.' },
+  greencard: { label: 'Green card (permanent resident)', note: 'Work authorization: U.S. lawful permanent resident (green card holder). Authorized to work in the U.S. for any employer and does not need visa sponsorship now or in the future. Not a U.S. citizen, so not eligible for roles that require U.S. citizenship or a federal security clearance.' },
+  visa: { label: 'Need visa sponsorship', note: 'Work authorization: needs employer visa sponsorship to work in the U.S.' },
+  other: { label: 'Prefer not to say', note: '' },
+};
+
+// Can this person apply, given the posting's citizenship / clearance / sponsorship rules?
+export function eligibility(j, auth = state.settings.workAuth) {
+  if (!auth || auth === 'citizen' || auth === 'other') return { ok: true, reasons: [] };
+  const reasons = [];
+  if (j.citizenOnly) reasons.push('requires US citizenship');
+  if (j.clearance) reasons.push('requires a security clearance (US citizens only)');
+  if (auth === 'visa' && j.noSponsorship) reasons.push('does not sponsor visas');
+  return { ok: reasons.length === 0, reasons };
+}
 
 export const saveSettings = () => store.set('settings', state.settings);
 export const saveFilters = () => { const { q, ...rest } = state.filters; store.set('filters', rest); };
