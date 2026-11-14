@@ -176,6 +176,9 @@ export const PUBLIC_SOURCES = [
   { id: 'schools-oracle', name: 'Schools on Oracle (BCPS, Harford)', home: 'https://www.bcps.org/jobs', kind: 'public', ttl: 3 * HOUR, fetch: (s) => each(pick(s, 'oracle'), oracle), cacheKey: (s) => pick(s, 'oracle').map((x) => x.host).join(',') },
   { id: 'schools-workday', name: 'Howard schools & UMD (Workday)', home: 'https://hcpss.wd1.myworkdayjobs.com/hcpss', kind: 'public', ttl: 3 * HOUR, fetch: (s) => each(pick(s, 'workday'), workday), cacheKey: (s) => pick(s, 'workday').map((x) => x.tenant).join(',') },
   { id: 'schools-applitrack', name: 'MD school districts (AppliTrack)', home: 'https://www.applitrack.com/pgcps/onlineapp/', kind: 'public', ttl: 3 * HOUR, fetch: (s) => each(pick(s, 'applitrack'), applitrack), cacheKey: (s) => pick(s, 'applitrack').map((x) => x.client).join(',') },
-  { id: 'gov-neogov', name: 'MD county governments (NEOGOV)', home: 'https://www.governmentjobs.com/careers/baltimorecounty', kind: 'public', ttl: 3 * HOUR, fetch: (s) => each(pick(s, 'neogov'), (n) => neogov(n, Math.max(30, s.maxAgeDays))), cacheKey: (s) => pick(s, 'neogov').map((x) => x.agency).join(',') },
+  // GovernmentJobs.com doesn't answer cloud hosts (requests from Vercel time out), so this
+  // source only runs when the app runs on your own computer.
+  { id: 'gov-neogov', name: 'MD county governments (NEOGOV)', home: 'https://www.governmentjobs.com/careers/baltimorecounty', kind: 'public', ttl: 3 * HOUR,
+    enabled: () => !process.env.VERCEL, needs: 'Only works when you run the app on your own computer (GovernmentJobs.com blocks cloud servers)', fetch: (s) => each(pick(s, 'neogov'), (n) => neogov(n, Math.max(30, s.maxAgeDays))), cacheKey: (s) => pick(s, 'neogov').map((x) => x.agency).join(',') },
   { id: 'gov-jobaps', name: 'State of Maryland (JobAps)', home: 'https://www.jobapscloud.com/MD/', kind: 'public', ttl: 3 * HOUR, fetch: (s) => each(pick(s, 'jobaps'), jobaps), cacheKey: (s) => pick(s, 'jobaps').map((x) => x.code).join(',') },
 ];

@@ -19,9 +19,9 @@ function sourceRows() {
     let st = 'not loaded yet', cls = '';
     if (s?.state === 'ok') st = `${s.count} tech jobs of ${s.total}`;
     else if (s?.state === 'error') { st = 'failed'; cls = 'err'; }
-    else if (s?.state === 'setup') { st = 'needs a key'; cls = 'warn'; }
+    else if (s?.state === 'setup') { st = /computer/.test(s.needs || '') ? 'local only' : 'needs a key'; cls = 'warn'; }
     else if (s?.state === 'off' || !on) st = 'off';
-    return `<li><label class="check"><input type="checkbox" data-src="${esc(src.id)}" ${on ? 'checked' : ''}> <span><a href="${safeUrl(src.home)}" target="_blank" rel="noopener noreferrer">${esc(src.name)}</a></span></label><span class="st ${cls}" ${s?.error ? `title="${esc(s.error)}"` : ''}>${esc(st)}</span></li>`;
+    return `<li><label class="check"><input type="checkbox" data-src="${esc(src.id)}" ${on ? 'checked' : ''}> <span><a href="${safeUrl(src.home)}" target="_blank" rel="noopener noreferrer">${esc(src.name)}</a></span></label><span class="st ${cls}" ${s?.error || s?.needs ? `title="${esc(s.error || s.needs)}"` : ''}>${esc(st)}</span></li>`;
   }).join('');
 }
 
