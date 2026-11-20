@@ -38,7 +38,7 @@ export async function extractText(file) {
   throw new Error('Use a PDF, Word (.docx) or text file.');
 }
 
-// Swap contact details for placeholders before text goes to Gemini; restore them afterwards.
+// Swap contact details for placeholders before text goes to an AI provider; restore them afterwards.
 export function maskText(text) {
   const map = {};
   let n = 0;

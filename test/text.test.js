@@ -15,9 +15,61 @@ test('categorize sorts tech titles into the right bucket', () => {
   assert.equal(categorize('Data Engineer'), 'data');
 });
 
+test('categorize recognizes healthcare, engineering, finance and business roles', () => {
+  const cases = [
+    ['Registered Nurse', 'nursing'],
+    ['Physical Therapist', 'allied-health'],
+    ['Medical Assistant', 'healthcare'],
+    ['Pharmacist', 'pharmacy'],
+    ['Pharmacy Technician', 'pharmacy-tech'],
+    ['Hospital Data Entry Clerk', 'hospital-data-entry'],
+    ['Medical Records Technician', 'hospital-data-entry'],
+    ['Internal Medicine Resident Physician', 'residency'],
+    ['Pharmacy Resident', 'residency'],
+    ['Clinical Research Assistant', 'clinical-research'],
+    ['Clinical Research Coordinator', 'clinical-research'],
+    ['Medical Billing Specialist', 'healthcare-admin'],
+    ['Civil Engineer', 'civil-engineering'],
+    ['Mechanical Design Engineer', 'mechanical-engineering'],
+    ['Electrical Controls Technician', 'electrical-engineering'],
+    ['Biomedical Engineer', 'biomedical-engineering'],
+    ['Manufacturing Quality Engineer', 'manufacturing-engineering'],
+    ['Environmental Scientist', 'environmental-science'],
+    ['Laboratory Research Assistant', 'research-assistant'],
+    ['Staff Accountant', 'accounting'],
+    ['Tax Associate', 'audit-tax'],
+    ['Payroll Specialist', 'payroll'],
+    ['Financial Analyst', 'finance'],
+    ['Business Analyst', 'business'],
+    ['Project Coordinator', 'project-management'],
+    ['Talent Acquisition Specialist', 'human-resources'],
+    ['Account Executive', 'sales'],
+    ['Marketing Coordinator', 'marketing'],
+    ['Customer Success Associate', 'customer-service'],
+    ['Supply Chain Operations Analyst', 'operations'],
+    ['Applications Engineer', 'engineering'],
+  ];
+  for (const [title, category] of cases) assert.equal(categorize(title), category, title);
+});
+
+test('categorize recognizes education, legal, social-service and design roles', () => {
+  const cases = [
+    ['Special Education Teacher', 'education'],
+    ['Assistant Professor of Biology', 'education'],
+    ['Student Success Advisor', 'academic-support'],
+    ['Licensed Social Worker', 'social-services'],
+    ['Paralegal', 'legal'],
+    ['Policy Analyst', 'public-policy'],
+    ['Urban Planner', 'architecture'],
+    ['UX Designer', 'design'],
+    ['Technical Writer', 'communications'],
+  ];
+  for (const [title, category] of cases) assert.equal(categorize(title), category, title);
+});
+
 test('categorize skips non-tech roles', () => {
   assert.equal(categorize('Patient Support Specialist'), null);
-  assert.equal(categorize('Account Executive, FedCiv'), null);
+  assert.equal(categorize('Account Executive, FedCiv'), 'sales');
   assert.equal(categorize('Executive Assistant'), null);
 });
 
@@ -66,7 +118,7 @@ test('categorize catches government and school IT titles', () => {
     assert.ok(['helpdesk', 'it'].includes(categorize(t)), t);
   }
   assert.equal(categorize('Building Automation Systems Technician'), null);
-  assert.equal(categorize('Special Education Teacher'), null);
+  assert.equal(categorize('Special Education Teacher'), 'education');
 });
 
 test('workAuth flags citizenship, clearance and sponsorship requirements', () => {

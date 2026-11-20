@@ -1,5 +1,5 @@
 // /grow  -  what to build and which certifications to get, tracked locally.
-import { state, $, $$, esc, on, api, store, toast, copy, currentResume, CAT_LABEL, LEVELS, WORK_AUTH } from '../core.js';
+import { state, $, $$, esc, on, api, store, toast, copy, currentResume, CAT_LABEL, LEVELS, WORK_AUTH, activeAIKey, activeAIProvider } from '../core.js';
 import { passes } from '../filters.js';
 import { loadFullText } from '../data.js';
 import { maskText } from '../docs.js';
@@ -16,7 +16,7 @@ function save(p) { store.set('plan', p); }
 
 function targetsText() {
   const f = state.filters;
-  const roles = f.roles.length ? f.roles.map((r) => CAT_LABEL[r]).join(', ') : 'any tech role';
+  const roles = f.roles.length ? f.roles.map((r) => CAT_LABEL[r]).join(', ') : 'any career field';
   const level = f.levels.length ? LEVELS.filter(([id]) => f.levels.includes(id)).map(([, l]) => l).join(' / ') : 'any level';
   const location = f.loc ? `${f.loc.label}${f.locRemote ? ' or remote' : ''}` : f.where === 'remote' ? 'remote' : state.settings.city || 'anywhere in the US';
   return { roles, level, location, workAuth: WORK_AUTH[state.settings.workAuth]?.note || '' };
@@ -121,7 +121,8 @@ export function render(el) {
     const d = demandFor(jobs, currentResume()?.text || '');
     const t = targetsText();
     const p = load();
-    const hasKey = !!(state.settings.geminiKey || state.config?.serverGeminiKey);
+    const provider = activeAIProvider();
+    const hasKey = !!(activeAIKey() || state.config?.serverAiProviders?.[provider]);
     const r = currentResume();
     el.innerHTML = `
       <div class="page page-narrow page-grow">
@@ -141,14 +142,14 @@ export function render(el) {
           </div>
         </section>
 
-        ${generating ? `<section class="card"><h2>Making your plan</h2><div class="loading-bar"></div><p class="muted">Gemini is comparing your resume with these postings. This takes 20 to 90 seconds.</p></section>`
+        ${generating ? `<section class="card"><h2>Making your plan</h2><div class="loading-bar"></div><p class="muted">Your selected AI provider is comparing your resume with these postings. This may take a minute.</p></section>`
           : p ? `${p.targets.roles !== t.roles || p.targets.level !== t.level ? `<p class="warn-box plan-stale">This plan was made for <b>${esc(p.targets.roles)}</b> (${esc(p.targets.level)}). Your filters now target <b>${esc(t.roles)}</b> (${esc(t.level)}). Make a new plan below to match, or change the filters back on the Jobs page.</p>` : ''}${planView(p)}<p class="regen"><button type="button" class="btn ghost" data-act="plan" ${hasKey && r ? '' : 'disabled'}>Make a new plan</button> <span class="muted small">Your progress on items with the same name is kept.</span></p>`
           : `<section class="card start">
               <h2>Make your plan</h2>
-              <p class="muted">Gemini reads your resume and the demand above, then lists projects that prove the skills you're missing, the certifications worth getting first and why, and quick resume fixes. You can check things off as you go.</p>
+              <p class="muted">Your selected AI provider reads your resume and the demand above, then lists projects that prove missing skills, certifications worth getting, and quick resume fixes. You can check things off as you go.</p>
               <ul class="checklist">
                 <li class="${r ? 'ok' : ''}">${r ? `Resume: <b>${esc(r.name)}</b>` : 'No resume yet <a class="btn ghost small" href="/resume" data-link>Add resume</a>'}</li>
-                <li class="${hasKey ? 'ok' : ''}">${hasKey ? 'Gemini key is set' : 'No Gemini key yet <a class="btn ghost small" href="/settings#gemini" data-link>Add key</a>'}</li>
+                <li class="${hasKey ? 'ok' : ''}">${hasKey ? 'AI writing is ready' : 'AI writing is optional <a class="btn ghost small" href="/settings#gemini" data-link>Set up AI writing</a>'}</li>
               </ul>
               <button type="button" class="btn accent big" data-act="plan" ${hasKey && r && !reading ? '' : 'disabled'}>Make my plan</button>
             </section>`}
@@ -164,7 +165,7 @@ export function render(el) {
     generating = true; draw();
     try {
       const targets = targetsText();
-      const plan = await api('/api/plan', { apiKey: state.settings.geminiKey, model: state.settings.model, resumeText: text, targets, demand: d });
+      const plan = await api('/api/plan', { provider: activeAIProvider(), apiKey: activeAIKey(), model: state.settings.model, resumeText: text, targets, demand: d });
       const prev = load();
       save({ plan, targets, at: Date.now(), progress: prev?.progress || {}, steps: prev?.steps || {}, exam: prev?.exam || {} });
       toast('Your plan is ready.');

@@ -1,28 +1,29 @@
 // The Express app, shared by the local server (server/index.js) and Vercel (api/index.js).
 import express from 'express';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const HOSTED = !!process.env.VERCEL;
 
-// Optional .env with GEMINI_API_KEY / ADZUNA_APP_ID / ADZUNA_APP_KEY (git-ignored, local only).
+// Optional .env with AI-provider keys and Adzuna credentials (git-ignored, local only).
 if (!HOSTED) {
   try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* no .env */ }
 } else if (process.env.ALLOW_SERVER_KEYS !== '1') {
   // On a public URL a server-side key would let every visitor spend your quota.
   // Visitors bring their own keys (kept in their browser) unless you opt in.
-  for (const k of ['GEMINI_API_KEY', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY']) delete process.env[k];
+  for (const k of ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY']) delete process.env[k];
 }
 
-const { aggregate, DEFAULT_BOARDS } = await import('./jobs.js');
-const { listModels, rankModels, tailor } = await import('./gemini.js');
+const { aggregate, DEFAULT_BOARDS, enrich } = await import('./jobs.js');
+const { AI_PROVIDERS, listModels, tailorAI } = await import('./ai.js');
 const { SOURCES } = await import('./sources.js');
 const { clearCache } = await import('./cache.js');
-const { describe } = await import('./describe.js');
-const { geocode } = await import('./geo.js');
+const { describe, parsePosting } = await import('./describe.js');
+const { geocode, majorCities } = await import('./geo.js');
 const { makePlan } = await import('./plan.js');
-const { requiredYears, entryHint, extractEmails, workAuth } = await import('./text.js');
+const { requiredYears, entryHint, extractEmails, workAuth, categorize } = await import('./text.js');
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -59,7 +60,11 @@ app.get('/api/config', (_req, res) => {
   res.json({
     defaultBoards: DEFAULT_BOARDS,
     sources: SOURCES.map((s) => ({ id: s.id, name: s.name, home: s.home, kind: s.kind, needs: s.needs || null })),
-    serverGeminiKey: !!process.env.GEMINI_API_KEY,
+    serverAiProviders: {
+      gemini: !!process.env.GEMINI_API_KEY,
+      openai: !!process.env.OPENAI_API_KEY,
+      anthropic: !!process.env.ANTHROPIC_API_KEY,
+    },
     hosted: HOSTED,
   });
 });
@@ -84,13 +89,19 @@ app.get('/api/geocode', (req, res) => {
   res.json(hit);
 });
 
+app.get('/api/major-cities', (_req, res) => {
+  res.json({ cities: majorCities() });
+});
+
 app.post('/api/plan', async (req, res) => {
   const { model, resumeText, targets, demand } = req.body || {};
-  const apiKey = keyFrom(req.body);
-  if (!apiKey) return res.status(400).json({ error: 'Add a Gemini API key in Settings first.' });
+  const provider = String(req.body?.provider || 'gemini');
+  if (!AI_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Choose Gemini, OpenAI, or Anthropic in Settings.' });
+  const apiKey = keyFrom(req.body, provider);
+  if (!apiKey) return res.status(400).json({ error: 'AI writing is optional. To create a plan, set it up in Settings; job search does not need it.' });
   if (!resumeText || String(resumeText).trim().length < 80) return res.status(400).json({ error: 'Load your resume first (it looks empty).' });
   try {
-    res.json(await makePlan({ apiKey, model: model || 'auto', resumeText, targets, demand }));
+    res.json(await makePlan({ provider, apiKey, model: model || 'auto', resumeText, targets, demand }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -107,15 +118,56 @@ app.post('/api/describe', async (req, res) => {
   }
 });
 
-const keyFrom = (body) => String(body?.apiKey || process.env.GEMINI_API_KEY || '').trim();
+app.post('/api/import', async (req, res) => {
+  const rawUrl = String(req.body?.url || '').trim();
+  let url = null, parsed;
+  try {
+    if (rawUrl) {
+      if (!/^https:\/\//i.test(rawUrl) || rawUrl.length > 2000) return res.status(400).json({ error: 'Paste a complete secure job-posting link that starts with https://.' });
+      url = new URL(rawUrl);
+      if (url.username || url.password) return res.status(400).json({ error: 'Links with account credentials cannot be imported.' });
+      parsed = await parsePosting(url.href);
+    } else {
+      parsed = {
+        title: String(req.body?.title || '').trim().slice(0, 180),
+        company: String(req.body?.company || '').trim().slice(0, 120),
+        location: String(req.body?.location || '').trim().slice(0, 160),
+        description: String(req.body?.description || '').trim().slice(0, 20000),
+      };
+      if (!parsed.title || parsed.description.length < 80) return res.status(400).json({ error: 'Add a job title and at least a few lines of the posting.' });
+      const link = String(req.body?.applyUrl || '').trim();
+      if (link) {
+        if (!/^https:\/\//i.test(link) || link.length > 2000) return res.status(400).json({ error: 'The application link must start with https://.' });
+        url = new URL(link);
+        if (url.username || url.password) return res.status(400).json({ error: 'Links with account credentials cannot be saved.' });
+      }
+    }
+    const category = categorize(parsed.title);
+    if (!category) return res.status(422).json({ error: 'I could not match this job title to a career field yet. You can still open the original posting directly.' });
+    const host = url?.hostname.replace(/^www\./, '') || 'Pasted posting';
+    const identity = url?.href || `${parsed.title}|${parsed.company}|${parsed.description}`;
+    const id = `manual-${createHash('sha256').update(identity).digest('hex').slice(0, 20)}`;
+    const job = enrich({
+      ...parsed, id, category, source: 'manual', sourceName: host, sourceHome: url?.origin || '',
+      url: url?.href || '', applyUrl: url?.href || '', fullTextLoaded: true, needsFullText: false,
+      imported: true, importedAt: new Date().toISOString(),
+    });
+    res.json({ job });
+  } catch (err) {
+    res.status(422).json({ error: String(err.message || err).slice(0, 300) });
+  }
+});
+
+const providerEnvKey = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY' };
+const keyFrom = (body, provider = 'gemini') => String(body?.apiKey || process.env[providerEnvKey[provider]] || '').trim();
 
 app.post('/api/models', async (req, res) => {
-  const apiKey = keyFrom(req.body);
-  if (!apiKey) return res.status(400).json({ error: 'Add a Gemini API key in Settings first.' });
+  const provider = String(req.body?.provider || 'gemini');
+  if (!AI_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Choose Gemini, OpenAI, or Anthropic.' });
+  const apiKey = keyFrom(req.body, provider);
+  if (!apiKey) return res.status(400).json({ error: 'AI writing is optional. To create tailored documents, set it up in Settings; job search does not need it.' });
   try {
-    const models = await listModels(apiKey);
-    const order = rankModels(models.map((m) => m.id));
-    res.json({ models: order.map((id) => models.find((m) => m.id === id)) });
+    res.json({ models: await listModels(provider, apiKey) });
   } catch (err) {
     res.status(err.status === 400 || err.status === 403 ? 401 : 502).json({ error: err.message });
   }
@@ -123,12 +175,14 @@ app.post('/api/models', async (req, res) => {
 
 app.post('/api/tailor', async (req, res) => {
   const { model, resumeText, job, notes, tone } = req.body || {};
-  const apiKey = keyFrom(req.body);
-  if (!apiKey) return res.status(400).json({ error: 'Add a Gemini API key in Settings first.' });
+  const provider = String(req.body?.provider || 'gemini');
+  if (!AI_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Choose Gemini, OpenAI, or Anthropic in Settings.' });
+  const apiKey = keyFrom(req.body, provider);
+  if (!apiKey) return res.status(400).json({ error: 'AI writing is optional. Set it up in Settings first.' });
   if (!resumeText || String(resumeText).trim().length < 80) return res.status(400).json({ error: 'Load your resume first (it looks empty).' });
   if (!job?.title) return res.status(400).json({ error: 'No job selected.' });
   try {
-    res.json(await tailor({ apiKey, model: model || 'auto', resumeText, job, notes, tone }));
+    res.json(await tailorAI({ provider, apiKey, model: model || 'auto', resumeText, job, notes, tone }));
   } catch (err) {
     res.status(err.status === 404 ? 404 : 502).json({ error: err.message });
   }

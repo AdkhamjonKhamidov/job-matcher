@@ -1,5 +1,5 @@
 // Filtering rules and the filter panel shared by the Jobs and Map pages.
-import { state, $, $$, esc, api, toast, saveFilters, CATS, LEVELS, milesBetween, currentResume, plural, eligibility } from './core.js';
+import { state, $, $$, esc, api, toast, saveFilters, CATS, CAREER_FIELDS, LEVELS, milesBetween, currentResume, plural, eligibility } from './core.js';
 import { loadJobs, updateTitle } from './data.js';
 
 // ---------- region / location ----------
@@ -77,7 +77,7 @@ export function filtered() {
 }
 
 // ---------- quick local skill overlap (no AI, no network) ----------
-const SKILLS = ['active directory', 'azure ad', 'entra', 'office 365', 'microsoft 365', 'm365', 'intune', 'sccm', 'jamf', 'windows', 'macos', 'linux', 'ubuntu', 'powershell', 'bash', 'ticketing', 'servicenow', 'jira', 'zendesk', 'freshservice', 'itil', 'tcp/ip', 'dns', 'dhcp', 'vpn', 'lan', 'wan', 'firewall', 'cisco', 'networking', 'vmware', 'hyper-v', 'citrix', 'comptia', 'a+', 'network+', 'security+', 'ccna', 'printer', 'hardware', 'troubleshooting', 'imaging', 'okta', 'google workspace', 'exchange', 'sharepoint', 'remote desktop', 'javascript', 'typescript', 'react', 'vue', 'angular', 'node', 'next.js', 'python', 'django', 'flask', 'fastapi', 'java', 'spring', 'kotlin', 'swift', 'c#', '.net', 'c++', 'golang', 'rust', 'ruby', 'rails', 'php', 'laravel', 'sql', 'postgres', 'postgresql', 'mysql', 'mongodb', 'redis', 'graphql', 'rest', 'api', 'aws', 'gcp', 'azure', 'docker', 'kubernetes', 'terraform', 'ansible', 'ci/cd', 'github actions', 'jenkins', 'git', 'html', 'css', 'tailwind', 'figma', 'selenium', 'cypress', 'playwright', 'pytest', 'jest', 'spark', 'airflow', 'dbt', 'snowflake', 'pandas', 'tableau', 'power bi', 'excel', 'machine learning', 'pytorch', 'tensorflow', 'llm', 'siem', 'splunk', 'soc', 'incident response', 'vulnerability', 'nist', 'iso 27001', 'agile', 'scrum'];
+const SKILLS = ['active directory', 'azure ad', 'entra', 'office 365', 'microsoft 365', 'm365', 'intune', 'sccm', 'jamf', 'windows', 'macos', 'linux', 'ubuntu', 'powershell', 'bash', 'ticketing', 'servicenow', 'jira', 'zendesk', 'freshservice', 'itil', 'tcp/ip', 'dns', 'dhcp', 'vpn', 'lan', 'wan', 'firewall', 'cisco', 'networking', 'vmware', 'hyper-v', 'citrix', 'comptia', 'a+', 'network+', 'security+', 'ccna', 'printer', 'hardware', 'troubleshooting', 'imaging', 'okta', 'google workspace', 'exchange', 'sharepoint', 'remote desktop', 'javascript', 'typescript', 'react', 'vue', 'angular', 'node', 'next.js', 'python', 'django', 'flask', 'fastapi', 'java', 'spring', 'kotlin', 'swift', 'c#', '.net', 'c++', 'golang', 'rust', 'ruby', 'rails', 'php', 'laravel', 'sql', 'postgres', 'postgresql', 'mysql', 'mongodb', 'redis', 'graphql', 'rest', 'api', 'aws', 'gcp', 'azure', 'docker', 'kubernetes', 'terraform', 'ansible', 'ci/cd', 'github actions', 'jenkins', 'git', 'html', 'css', 'tailwind', 'figma', 'selenium', 'cypress', 'playwright', 'pytest', 'jest', 'spark', 'airflow', 'dbt', 'snowflake', 'pandas', 'tableau', 'power bi', 'excel', 'machine learning', 'pytorch', 'tensorflow', 'llm', 'siem', 'splunk', 'soc', 'incident response', 'vulnerability', 'nist', 'iso 27001', 'agile', 'scrum', 'patient care', 'clinical care', 'hipaa', 'ehr', 'emr', 'epic', 'cerner', 'medical records', 'clinical research', 'phlebotomy', 'patient assessment', 'bls', 'osha', 'autocad', 'solidworks', 'revit', 'cad', 'gd&t', 'plc', 'scada', 'lean manufacturing', 'six sigma', 'root cause analysis', 'quality assurance', 'project management', 'budgeting', 'financial reporting', 'financial statements', 'gaap', 'gaas', 'quickbooks', 'netsuite', 'sap', 'accounts payable', 'accounts receivable', 'payroll', 'tax preparation', 'auditing', 'forecasting', 'financial analysis', 'risk management', 'salesforce', 'hubspot', 'crm', 'hris', 'applicant tracking system', 'recruiting', 'seo', 'google analytics', 'social media', 'content marketing', 'customer success', 'supply chain', 'procurement', 'inventory management'];
 export const SKILL_RES = SKILLS.map((s) => [s, new RegExp(`(^|[^a-z0-9+#.])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9+#])`, 'i')]);
 let resumeSkills = null;
 export function skillFit(job) {
@@ -106,6 +106,35 @@ export function suggestRoles(text = '') {
   if (/security|soc\b|siem|cyber|security\+/.test(t)) hits.push('security');
   if (/data (analyst|engineer|scien)|machine learning|sql|pandas|tableau|power bi/.test(t)) hits.push('data');
   if (/\bqa\b|quality assurance|selenium|cypress|test automation/.test(t)) hits.push('qa');
+  if (/registered nurse|\bnurs(e|ing)\b|\blpn\b|\blvn\b/.test(t)) hits.push('nursing');
+  if (/physical therapist|occupational therapist|respiratory therapist|speech[- ]language pathologist|paramedic|phlebotom/.test(t)) hits.push('allied-health');
+  if (/medical residenc|resident physician|physician resident|medical fellow|clinical fellow|pharmacy residenc|pharmacy resident/.test(t)) hits.push('residency');
+  if (/pharmacy technician|pharmacy tech|pharmacy assistant|pharmacy aide/.test(t)) hits.push('pharmacy-tech');
+  else if (/pharmac(y|ist)/.test(t)) hits.push('pharmacy');
+  if (/hospital data entry|medical data entry|healthcare data entry|medical records (clerk|technician|assistant)|health records (clerk|technician|assistant)/.test(t)) hits.push('hospital-data-entry');
+  if (/clinical research/.test(t)) hits.push('clinical-research');
+  if (/medical assistant|patient care|physician assistant/.test(t)) hits.push('healthcare');
+  if (/medical office|medical billing|medical coder|healthcare administration|health information/.test(t)) hits.push('healthcare-admin');
+  if (/clinical laboratory|medical technologist|lab(oratory)? technician/.test(t)) hits.push('medical-lab');
+  if (/civil engineer|structural engineer|geotechnical engineer/.test(t)) hits.push('civil-engineering');
+  if (/mechanical engineer|aerospace engineer|automotive engineer/.test(t)) hits.push('mechanical-engineering');
+  if (/electrical engineer|controls engineer|electronics engineer/.test(t)) hits.push('electrical-engineering');
+  if (/biomedical engineer|medical device engineer/.test(t)) hits.push('biomedical-engineering');
+  if (/manufacturing engineer|industrial engineer|quality engineer/.test(t)) hits.push('manufacturing-engineering');
+  if (/environmental engineer/.test(t)) hits.push('environmental-science');
+  if (/research assistant|research associate|research aide/.test(t)) hits.push('research-assistant');
+  if (/chemist|biologist|physicist|geologist|research scientist/.test(t)) hits.push('science');
+  if (/accountant|accounting|bookkeep|accounts payable|accounts receivable/.test(t)) hits.push('accounting');
+  if (/auditor|audit|tax preparer|tax accountant/.test(t)) hits.push('audit-tax');
+  if (/payroll/.test(t)) hits.push('payroll');
+  if (/financial analyst|finance|banking|actuary|underwriter/.test(t)) hits.push('finance');
+  if (/business analyst|business intelligence|management analyst/.test(t)) hits.push('business');
+  if (/project manager|project coordinator|program manager/.test(t)) hits.push('project-management');
+  if (/human resources|\bhr\b|recruiter|talent acquisition|people operations/.test(t)) hits.push('human-resources');
+  if (/sales representative|account executive|business development|sales manager/.test(t)) hits.push('sales');
+  if (/marketing|communications|public relations|seo specialist/.test(t)) hits.push('marketing');
+  if (/customer service|customer success|client services/.test(t)) hits.push('customer-service');
+  if (/operations analyst|supply chain|logistics|procurement/.test(t)) hits.push('operations');
   return hits;
 }
 
@@ -147,6 +176,11 @@ export function renderRail(el, onChange) {
     f.days !== 7 ? (f.days === 1 ? '24h' : '3 days') : '',
   ].filter(Boolean).join(' · ');
   const open = el.dataset.open === 'true';
+  const hasWorkAuth = state.settings.workAuth && !['citizen', 'other'].includes(state.settings.workAuth);
+  const activeMore = Number(f.regionOnly) + Number(!!hasWorkAuth && f.eligibleOnly) + Number(f.publicOlder) + Number(f.hasEmail) + Number(f.hideSeen);
+  const moreOpen = el.dataset.moreOpen == null ? activeMore > 0 : el.dataset.moreOpen === 'true';
+  const careerOpen = el._careerOpen || (el._careerOpen = {});
+  const countryName = (REGION[state.settings.country] || REGION.us).name;
   el.innerHTML = `
     <label class="search">
       <span class="sr-only">Search jobs</span>
@@ -165,7 +199,17 @@ export function renderRail(el, onChange) {
 
     <section class="rail-group">
       <h2>Role <span class="hint">${f.roles.length ? '' : 'all'}</span></h2>
-      <div class="chips">${CATS.map(([id, label]) => chip('data-role', id, label, f.roles.includes(id), loading ? null : count('roles', 'category', id))).join('')}</div>
+      <div class="role-filter-groups">${CAREER_FIELDS.map((field) => {
+        const selected = field.roles.filter((id) => f.roles.includes(id)).length;
+        const isOpen = careerOpen[field.id] ?? selected > 0;
+        return `<details class="role-filter-group" data-role-field="${esc(field.id)}" ${isOpen ? 'open' : ''}>
+          <summary><span class="career-title">${esc(field.label)}</span><span class="career-count">${selected ? `${selected} selected` : `${field.roles.length} roles`}</span></summary>
+          <div class="chips">${field.roles.map((id) => {
+            const label = CATS.find(([role]) => role === id)[1];
+            return chip('data-role', id, label, f.roles.includes(id), loading ? null : count('roles', 'category', id));
+          }).join('')}</div>
+        </details>`;
+      }).join('')}</div>
     </section>
 
     <section class="rail-group">
@@ -186,16 +230,25 @@ export function renderRail(el, onChange) {
         <button type="submit" class="btn small">Search</button>
       </form>
       ${f.loc ? `<div class="loc-chip"><span>${esc(locLabel(f.loc))}</span><button type="button" data-loc-clear aria-label="Clear location">&times;</button></div>
-      ${f.where !== 'onsite' ? `<label class="check"><input type="checkbox" data-f="locRemote" ${f.locRemote ? 'checked' : ''}> <span>Include remote jobs too</span></label>` : ''}` : ''}
+      ${f.where !== 'onsite' ? `<label class="check"><input type="checkbox" data-f="locRemote" ${f.locRemote ? 'checked' : ''}> <span>Remote jobs anywhere</span></label>` : ''}` : ''}
     </section>
 
-    <details class="more rail-group" ${f.hasEmail || !f.regionOnly || !f.hideSeen || !f.eligibleOnly || !f.publicOlder ? 'open' : ''}>
-      <summary>More filters</summary>
-      <label class="check"><input type="checkbox" data-f="regionOnly" ${f.regionOnly ? 'checked' : ''}> <span>Only jobs open to ${esc((REGION[state.settings.country] || REGION.us).name)} applicants</span></label>
-      ${state.settings.workAuth && !['citizen', 'other'].includes(state.settings.workAuth) ? `<label class="check"><input type="checkbox" data-f="eligibleOnly" ${f.eligibleOnly ? 'checked' : ''}> <span>Hide jobs I can't apply for (citizenship${state.settings.workAuth === 'visa' ? ', clearance or no sponsorship' : ' or clearance'})</span></label>` : ''}
-      <label class="check"><input type="checkbox" data-f="publicOlder" ${f.publicOlder ? 'checked' : ''}> <span>Schools and government: show openings up to 30 days old (they stay open longer)</span></label>
-      <label class="check"><input type="checkbox" data-f="hasEmail" ${f.hasEmail ? 'checked' : ''}> <span>Has a recruiter email</span></label>
-      <label class="check"><input type="checkbox" data-f="hideSeen" ${f.hideSeen ? 'checked' : ''}> <span>Hide jobs I dismissed</span></label>
+    <details class="more rail-group" ${moreOpen ? 'open' : ''}>
+      <summary><span>More filters</span>${activeMore ? `<span class="more-count">${activeMore} active</span>` : ''}</summary>
+      <section class="more-filter-group">
+        <h3>Location &amp; eligibility</h3>
+        <label class="check"><input type="checkbox" data-f="regionOnly" ${f.regionOnly ? 'checked' : ''}> <span><b>Only show jobs available in ${esc(countryName)}</b><small>Based on job location and remote-region details, not citizenship.</small></span></label>
+        ${hasWorkAuth ? `<label class="check"><input type="checkbox" data-f="eligibleOnly" ${f.eligibleOnly ? 'checked' : ''}> <span><b>Hide jobs that conflict with my work authorization</b><small>Uses the work authorization selected in Settings.</small></span></label>` : '<p class="muted small">Set your <a href="/settings" data-link>work authorization in Settings</a> to filter by citizenship and sponsorship requirements.</p>'}
+      </section>
+      <section class="more-filter-group">
+        <h3>Application details</h3>
+        <label class="check"><input type="checkbox" data-f="hasEmail" ${f.hasEmail ? 'checked' : ''}> <span><b>Has a recruiter email</b><small>Only postings with a contact email we could find.</small></span></label>
+        <label class="check"><input type="checkbox" data-f="hideSeen" ${f.hideSeen ? 'checked' : ''}> <span><b>Hide jobs I dismissed</b><small>Turn this off to see dismissed jobs again.</small></span></label>
+      </section>
+      <section class="more-filter-group">
+        <h3>School &amp; government jobs</h3>
+        <label class="check"><input type="checkbox" data-f="publicOlder" ${f.publicOlder ? 'checked' : ''}> <span><b>Include posts up to 30 days old</b><small>Public employers often leave vacancies open longer than other sources.</small></span></label>
+      </section>
     </details>
     </div>`;
 
@@ -221,6 +274,10 @@ export function renderRail(el, onChange) {
     e.preventDefault();
     submitLoc();
   });
+  el.addEventListener('toggle', (e) => {
+    if (e.target.matches('details.more')) el.dataset.moreOpen = String(e.target.open);
+    if (e.target.matches('details.role-filter-group')) el._careerOpen[e.target.dataset.roleField] = e.target.open;
+  }, true);
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -238,7 +295,11 @@ export function renderRail(el, onChange) {
   });
   el.addEventListener('change', (e) => {
     const k = e.target.dataset.f;
-    if (k && k !== 'q') { state.filters[k] = e.target.checked; changed({ reload: k === 'publicOlder' }); }
+    if (k && k !== 'q') {
+      state.filters[k] = e.target.checked;
+      if (k === 'locRemote') state.filters.locRemoteExplicit = true;
+      changed({ reload: k === 'publicOlder' });
+    }
     if (e.target.id === 'locRadius' && state.filters.loc) submitLoc();
   });
   const submitLoc = async () => {
@@ -267,7 +328,7 @@ export const emptyHint = () => {
   if (state.filters.days < 7) tips.push('7 days');
   if (state.filters.roles.length) tips.push('more roles');
   if (state.filters.levels.length && !state.filters.levels.includes('mid')) tips.push('adding Mid level');
-  return `Try ${tips.join(', ') || 'clearing the search box'}.${state.filters.loc && !state.settings.adzuna?.appId ? ' A free Adzuna key in Settings adds many more local on-site jobs.' : ''}`;
+  return `Try ${tips.join(', ') || 'clearing the search box'}.${state.filters.loc && !state.settings.adzuna?.appId ? ' Connect a free Adzuna account in Settings to add more local on-site jobs.' : ''}`;
 };
 
 export { plural };

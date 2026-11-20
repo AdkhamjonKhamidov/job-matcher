@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { codes } = require('zipcodes/lib/codes.js');
 const { full: STATE_FULL } = require('zipcodes/lib/states.js');
+const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC PR'.split(' '));
 
 const norm = (s) => String(s || '').toLowerCase().replace(/\./g, '').replace(/\bsaint\b/g, 'st').replace(/\bfort\b/g, 'ft').replace(/\s+/g, ' ').trim();
 
@@ -22,6 +23,21 @@ const avg = (a) => ({ lat: +(a.lat / a.n).toFixed(4), lon: +(a.lon / a.n).toFixe
 const CITIES = new Map([...cityAcc].map(([k, a]) => [k, avg(a)]));
 const STATES = new Map([...stateAcc].map(([k, a]) => [k, avg(a)]));
 // Alaska/Hawaii centroids from ZIP averages are fine; DC is its own "state" in the data.
+const MAJOR_CITIES = (() => {
+  const byState = new Map();
+  for (const [key, city] of CITIES) {
+    const [name, state] = key.split('|');
+    if (!US_STATES.has(state)) continue;
+    const cities = byState.get(state) || [];
+    cities.push({
+      name: name.replace(/\b\w/g, (c) => c.toUpperCase()),
+      state, lat: city.lat, lon: city.lon, zipCount: city.n,
+    });
+    byState.set(state, cities);
+  }
+  return [...byState.entries()].sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([, cities]) => cities.sort((a, b) => b.zipCount - a.zipCount).slice(0, 6));
+})();
 
 const NAME_TO_ST = Object.fromEntries(Object.entries(STATE_FULL).filter(([, ab]) => STATES.has(ab)).map(([name, ab]) => [name.toLowerCase(), ab]));
 const ST_TO_NAME = Object.fromEntries(Object.entries(NAME_TO_ST).map(([name, ab]) => [ab, name.replace(/\b\w/g, (c) => c.toUpperCase())]));
@@ -114,6 +130,7 @@ export function geocode(q) {
 }
 
 export function stateName(st) { return ST_TO_NAME[st] || st; }
+export function majorCities() { return MAJOR_CITIES; }
 
 export function milesBetween(a, b) {
   const R = 3958.8, rad = Math.PI / 180;

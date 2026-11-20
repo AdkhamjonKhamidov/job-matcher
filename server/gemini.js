@@ -30,7 +30,7 @@ export async function listModels(apiKey) {
     .map((m) => ({ id: m.name.replace(/^models\//, ''), label: m.displayName || m.name }));
 }
 
-const SCHEMA = {
+export const SCHEMA = {
   type: 'OBJECT',
   properties: {
     matchScore: { type: 'INTEGER', description: '0-100 honest fit of the resume to this job' },
@@ -53,7 +53,7 @@ const SCHEMA = {
 };
 
 export function buildPrompt({ resumeText, job, notes = '', tone = 'professional' }) {
-  return `You are an expert technical recruiter and resume writer helping a candidate apply for one specific job.
+  return `You are an expert career writer helping a candidate apply for one specific job in any professional field.
 
 RULES
 - Never invent employers, titles, dates, degrees, certifications, tools or numbers. Only reword, reorder and emphasize what the resume already shows.
@@ -177,7 +177,7 @@ export function guard(kit, knownText = '') {
   kit.screeningAnswers = (kit.screeningAnswers || []).map((qa) => {
     const rule = PERSONAL.find(([q]) => q.test(String(qa.question)));
     if (rule && !rule[1].test(known)) {
-      return { question: qa.question, answer: '[Answer this one yourself: only you know this. Nothing in your resume covers it, so Gemini did not guess.]' };
+      return { question: qa.question, answer: '[Answer this one yourself: only you know this. Nothing in your resume covers it, so the AI did not guess.]' };
     }
     return qa;
   });

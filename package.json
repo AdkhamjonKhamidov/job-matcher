@@ -2,7 +2,7 @@
   "name": "job-matcher",
   "version": "1.0.0",
   "private": true,
-  "description": "Local job feed for IT, helpdesk and software roles with Gemini-tailored apply kits.",
+  "description": "Local job feed across career fields with optional AI-tailored apply kits.",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
@@ -24,6 +24,7 @@
     "pdfjs-dist": "^4.10.38",
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1",
+    "world-atlas": "^2.0.2",
     "zipcodes": "^8.0.0"
   }
 }

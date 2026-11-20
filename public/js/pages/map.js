@@ -1,5 +1,5 @@
-// US map of the current results. Offline: bundled state shapes + d3-geo, no tiles.
-// Zoom with the wheel, double-click, pinch or the buttons; drag to pan.
+// US results on a bundled, wraparound world map. Offline: no map tiles or external requests.
+// Zoom with the wheel, double-click, pinch or the buttons; drag to pan east-west continuously.
 import { state, $, esc, on, plural, milesBetween } from '../core.js';
 import { renderRail, filtered, resultSummary, locLabel } from '../filters.js';
 import { jobRow } from '../components.js';
@@ -17,20 +17,34 @@ function loadScript(src) {
 async function ensureLib() {
   if (lib) return lib;
   lib = (async () => {
-    if (!window.d3?.geoAlbersUsa) {
+    if (!window.d3?.geoEquirectangular) {
       await loadScript('/vendor/d3/d3-array.min.js');
       await loadScript('/vendor/d3/d3-geo.min.js');
     }
     if (!window.topojson) await loadScript('/vendor/topojson/topojson-client.min.js');
-    const us = await (await fetch('/vendor/us-atlas/states-albers-10m.json')).json();
-    const projection = window.d3.geoAlbersUsa().scale(1300).translate([W / 2, H / 2]);
-    const path = window.d3.geoPath();
-    const states = window.topojson.feature(us, us.objects.states).features;
+    const [us, world, cityData] = await Promise.all([
+      fetch('/vendor/us-atlas/states-10m.json').then((r) => r.json()),
+      fetch('/vendor/world-atlas/countries-110m.json').then((r) => r.json()),
+      fetch('/api/major-cities').then((r) => {
+        if (!r.ok) throw new Error(`Could not load city labels (${r.status})`);
+        return r.json();
+      }),
+    ]);
+    const projection = window.d3.geoEquirectangular().rotate([98, 0]).center([0, 38]).fitExtent([[0, 0], [W, H]], { type: 'Sphere' });
+    const path = window.d3.geoPath(projection);
+    const states = window.topojson.feature(us, us.objects.states).features
+      .filter((f) => STATE_ABBR[f.properties?.name]);
+    const countries = window.topojson.feature(world, world.objects.countries).features
+      .filter((f) => !['010', '840'].includes(String(f.id).padStart(3, '0')));
+    const continentalBounds = path.bounds({
+      type: 'FeatureCollection',
+      features: states.filter((f) => !['AK', 'HI', 'PR'].includes(STATE_ABBR[f.properties.name])),
+    });
     return {
-      states,
+      states, countries, majorCities: cityData.cities, continentalBounds, worldBounds: path.bounds({ type: 'Sphere' }),
       borders: window.topojson.mesh(us, us.objects.states, (a, b) => a !== b),
       nation: window.topojson.mesh(us, us.objects.states, (a, b) => a === b),
-      projection, path, projPath: window.d3.geoPath(projection),
+      projection, path, projPath: path,
       centroids: Object.fromEntries(states.map((f) => [f.properties.name, path.centroid(f)])),
     };
   })();
@@ -43,6 +57,7 @@ const ABBR_STATE = Object.fromEntries(Object.entries(STATE_ABBR).map(([n, a]) =>
 const SMALL_STATES = new Set(['DC', 'RI', 'DE', 'CT', 'NJ', 'MA', 'NH', 'VT', 'MD']);
 const SHADES = ['var(--map-empty)', '#D7D9FF', '#B9BCFF', '#9FA0FF', '#7E8FF0', '#5882E8'];
 const MIN_W = W / 60; // max zoom 60x
+const MIN_CITY_LABEL_ZOOM = 16;
 
 export function render(el) {
   el.innerHTML = `
@@ -51,43 +66,51 @@ export function render(el) {
       <section class="map-main">
         <div class="feed-head"><p class="count" aria-live="polite"></p></div>
         <div class="map-wrap">
-          <svg class="us-map" tabindex="0" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of US job postings. Drag to pan, scroll or pinch to zoom."></svg>
+          <svg class="us-map" tabindex="0" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="US job postings on a flat world map. Other countries are shown for context. Drag or scroll horizontally to wrap around the world; scroll vertically or pinch to zoom."></svg>
           <div class="map-tools" role="group" aria-label="Map zoom">
             <button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>
             <button type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out">&minus;</button>
             <button type="button" data-zoom="fit" title="Zoom to the postings">Fit</button>
-            <button type="button" data-zoom="us" title="Show the whole US">US</button>
+            <button type="button" data-zoom="us" title="Focus on the continental US">US</button>
+            <button type="button" data-zoom="world" title="Show all countries">World</button>
           </div>
           <div class="map-tip" hidden></div>
-          <p class="map-help">Drag to move · scroll, pinch or double-click to zoom</p>
+          <p class="map-help">Drag to pan · horizontal scroll wraps · vertical scroll zooms</p>
         </div>
-        <div class="map-legend"><span>fewer</span>${SHADES.slice(1).map((c) => `<i style="background:${c}"></i>`).join('')}<span>more postings per state</span><span class="sep">dot size = postings in that city</span></div>
-        <p class="map-note"></p>
+        <div class="map-legend"><span>fewer</span>${SHADES.slice(1).map((c) => `<i style="background:${c}"></i>`).join('')}<span>more postings per state</span><span class="sep">dot size = postings in that city</span><span class="map-country-context"><i aria-hidden="true"></i>Other countries shown for context; job data is US only</span></div>
+        <p class="map-note" hidden></p>
       </section>
       <section class="map-side" aria-live="polite">
         <h3 class="map-pick-title">Pick a dot or a state</h3>
-        <p class="muted map-pick-hint">Click a city dot or a state to list its postings here.</p>
+        <p class="muted map-pick-hint">Select a city or state to see jobs.</p>
         <ol class="job-list" role="listbox" aria-label="Postings at the selected place"></ol>
       </section>
     </div>`;
   const svg = $('.us-map', el), rail = $('.rail', el), side = $('.map-side', el), tip = $('.map-tip', el), wrap = $('.map-wrap', el);
   let vb = { x: 0, y: 0, w: W, h: H };
   let fitBox = null, lastFitKey = '', cities = new Map(), byState = new Map(), l = null;
+  let dotNodes = [], pinNodes = [], stateLabelNodes = [], cityLabelNodes = [], cityLabelGroups = [], cityLabelData = [];
+  let cityLabelsVisible = false, cityLabelViewKey = '', selectedCityLabel = false, rescaleFrame = 0;
 
   // ---------- view box (zoom & pan) ----------
   const k = () => W / vb.w;
+  const scheduleRescale = () => {
+    if (rescaleFrame) return;
+    rescaleFrame = requestAnimationFrame(() => { rescaleFrame = 0; rescale(); });
+  };
   const clampVb = () => {
     vb.w = Math.min(W * 1.2, Math.max(MIN_W, vb.w));
     vb.h = vb.w * H / W;
-    const m = vb.w * 0.5; // allow some slack past the edges
-    vb.x = Math.min(W - vb.w + m, Math.max(-m, vb.x));
+    const centerX = ((vb.x + vb.w / 2) % W + W) % W;
+    vb.x = centerX - vb.w / 2;
+    const m = vb.w * 0.5; // allow some slack past the vertical edges
     vb.y = Math.min(H - vb.h + m, Math.max(-m, vb.y));
   };
   const applyVb = () => {
     tip.hidden = true;
     clampVb();
     svg.setAttribute('viewBox', `${vb.x.toFixed(2)} ${vb.y.toFixed(2)} ${vb.w.toFixed(2)} ${vb.h.toFixed(2)}`);
-    rescale();
+    scheduleRescale();
   };
   // Screen point -> SVG point (accounts for letterboxing from preserveAspectRatio).
   const toSvg = (clientX, clientY) => {
@@ -102,10 +125,10 @@ export function render(el) {
     vb = { x: sx - (sx - vb.x) * f, y: sy - (sy - vb.y) * f, w: nw, h: nw * H / W };
     applyVb();
   };
-  const fitTo = ([[x0, y0], [x1, y1]], pad = 0.25) => {
+  const fitTo = ([[x0, y0], [x1, y1]], pad = 0.25, minWidth = 120) => {
     let w = (x1 - x0) * (1 + pad * 2), h = (y1 - y0) * (1 + pad * 2);
     if (w / h > W / H) h = w * H / W; else w = h * W / H;
-    w = Math.max(w, 120);
+    w = Math.max(w, minWidth);
     vb = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * H / W) / 2, w, h: w * H / W };
     applyVb();
   };
@@ -116,26 +139,58 @@ export function render(el) {
     // Map units per screen pixel, so sizes below are in screen pixels.
     const r = svg.getBoundingClientRect();
     const px = 1 / (Math.min(r.width / vb.w, r.height / vb.h) || 1);
-    for (const c of svg.querySelectorAll('.dot')) c.setAttribute('r', (Number(c.dataset.r) * px).toFixed(3));
-    const pin = svg.querySelector('.pin'); if (pin) pin.setAttribute('r', (6 * px).toFixed(3));
-    for (const t of svg.querySelectorAll('.st-label')) {
+    const compactMap = window.matchMedia('(max-width: 760px)').matches && kk < 8;
+    for (const c of dotNodes) c.setAttribute('r', (Number(c.dataset.r) * px).toFixed(3));
+    for (const pin of pinNodes) pin.setAttribute('r', (3 * px).toFixed(3));
+    for (const t of stateLabelNodes) {
       t.style.fontSize = `${(12 * px).toFixed(3)}px`;
-      t.style.display = t.dataset.small && kk < 2.5 ? 'none' : '';
+      t.style.display = compactMap || (t.dataset.small && kk < 2.5) ? 'none' : '';
     }
-    // City labels: busiest first (and the selected one always); skip any that would
-    // overlap a label already placed, so they never pile up. Zooming in makes room.
+    const showCityLabels = kk >= MIN_CITY_LABEL_ZOOM || selectedCityLabel;
+    if (!showCityLabels) {
+      if (cityLabelsVisible) {
+        for (const group of cityLabelGroups) group.replaceChildren();
+        cityLabelNodes = [];
+        cityLabelViewKey = '';
+      }
+      cityLabelsVisible = false;
+      svg.classList.toggle('zoomed', kk > 1.05);
+      return;
+    }
+    const cell = Math.max(5, vb.w * 0.25);
+    const viewKey = `${Math.floor(vb.x / cell)}:${Math.floor(vb.y / cell)}:${Math.round(vb.w / 4)}`;
+    if (!cityLabelsVisible || viewKey !== cityLabelViewKey) {
+      const margin = vb.w * 0.5;
+      for (const group of cityLabelGroups) {
+        const shift = Number(group.closest('.map-copy')?.dataset.shift || 0);
+        group.innerHTML = cityLabelData.filter((label) => {
+          const x = label.x + shift;
+          return x >= vb.x - margin && x <= vb.x + vb.w + margin
+            && label.y >= vb.y - margin && label.y <= vb.y + vb.h + margin;
+        }).map((label) => `<text class="city-label${label.selected ? ' sel' : ''}${label.major ? ' major-city-label' : ''}" x="${label.x.toFixed(2)}" y="${label.y.toFixed(2)}" data-r="${label.radius}" data-rank="${label.rank}"${label.city ? ` data-city="${esc(label.city)}"` : ''} style="display:none">${esc(label.text)}</text>`).join('');
+      }
+      cityLabelNodes = [...svg.querySelectorAll('.city-label')].sort((a, b) => Number(a.dataset.rank) - Number(b.dataset.rank));
+      cityLabelViewKey = viewKey;
+    }
+    cityLabelsVisible = true;
     const placedBoxes = [];
-    const labels = [...svg.querySelectorAll('.city-label')].sort((a, b) => (b.classList.contains('sel') - a.classList.contains('sel')) || (Number(a.dataset.rank) - Number(b.dataset.rank)));
-    for (const t of labels) {
+    for (const t of cityLabelNodes) {
+      const selected = t.classList.contains('sel');
+      if (kk < MIN_CITY_LABEL_ZOOM && !selected) { t.style.display = 'none'; continue; }
+      const shift = Number(t.closest('.map-copy')?.dataset.shift || 0);
+      const x = Number(t.getAttribute('x')) + shift, y = Number(t.getAttribute('y'));
+      const w = t.textContent.length * 7.4 * px, h = 15 * px;
+      if (x + w / 2 <= vb.x || x - w / 2 >= vb.x + vb.w || y <= vb.y || y - h >= vb.y + vb.h) {
+        t.style.display = 'none';
+        continue;
+      }
       t.style.fontSize = `${(13 * px).toFixed(3)}px`;
       const dy = -(Number(t.dataset.r) + 5) * px;
       t.setAttribute('dy', dy.toFixed(3));
-      const x = Number(t.getAttribute('x')), y = Number(t.getAttribute('y')) + dy;
-      const w = t.textContent.length * 7.4 * px, h = 15 * px;
-      const box = [x - w / 2, y - h, x + w / 2, y + 2 * px];
+      const box = [x - w / 2, y + dy - h, x + w / 2, y + dy + 2 * px];
       const inView = box[0] > vb.x && box[2] < vb.x + vb.w && box[1] > vb.y && box[3] < vb.y + vb.h;
       const clash = placedBoxes.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
-      const show = inView && (t.classList.contains('sel') || (!clash && placedBoxes.length < Math.round(6 * kk)));
+      const show = inView && (selected || (!clash && placedBoxes.length < Math.round(6 * kk)));
       t.style.display = show ? '' : 'none';
       if (show) placedBoxes.push(box);
     }
@@ -146,7 +201,10 @@ export function render(el) {
   const draw = async () => {
     const list = filtered();
     $('.count', el).innerHTML = state.loading && !state.jobs.length ? 'Checking job boards...' : resultSummary(list);
-    try { l = await ensureLib(); } catch (err) { $('.map-note', el).textContent = err.message; return; }
+    const note = $('.map-note', el);
+    note.hidden = true;
+    note.textContent = '';
+    try { l = await ensureLib(); } catch (err) { note.textContent = err.message; note.hidden = false; return; }
     if (!svg.isConnected) return;
     const loc = state.filters.loc;
     const inside = (p) => !loc || (loc.kind === 'state' || loc.radius === 'state' ? p.state === loc.state : milesBetween(loc, p) <= Number(loc.radius));
@@ -175,6 +233,10 @@ export function render(el) {
       if (pin) extra += `<circle class="pin" cx="${pin[0].toFixed(1)}" cy="${pin[1].toFixed(1)}" r="6"/>`;
     }
 
+    const countryPaths = l.countries.map((f) => {
+      const name = f.properties?.name || `Country ${f.id}`;
+      return `<path class="world-country" d="${l.path(f)}"><title>${esc(name)}</title></path>`;
+    }).join('');
     const statePaths = l.states.map((f) => {
       const st = STATE_ABBR[f.properties.name];
       const n = byState.get(st)?.length || 0;
@@ -188,22 +250,41 @@ export function render(el) {
 
     const placed = [...cities.values()].map((c) => ({ ...c, xy: l.projection([c.lon, c.lat]) })).filter((c) => c.xy)
       .sort((a, b) => b.jobs.length - a.jobs.length);
+    const major = l.majorCities
+      .filter((c) => !placed.some((p) => p.state === c.state && milesBetween(p, c) < 8))
+      .map((c) => ({ ...c, xy: l.projection([c.lon, c.lat]) }))
+      .filter((c) => c.xy);
     const dots = placed.map((c) => {
       const r = 3.5 + Math.sqrt(c.jobs.length) * 2;
       return `<circle class="dot${sel?.type === 'city' && sel.key === c.label ? ' sel' : ''}" cx="${c.xy[0].toFixed(2)}" cy="${c.xy[1].toFixed(2)}" r="${r}" data-r="${r}" data-city="${esc(c.label)}" tabindex="0" role="button" aria-label="${esc(c.label)}: ${plural(c.jobs.length, 'posting')}"></circle>`;
     }).join('');
-    // Rank decides when a label shows: the 6 busiest always, the rest as you zoom in.
-    const labels = placed.map((c, i) => {
-      const r = 3.5 + Math.sqrt(c.jobs.length) * 2;
-      return `<text class="city-label${sel?.type === 'city' && sel.key === c.label ? ' sel' : ''}" x="${c.xy[0].toFixed(2)}" y="${c.xy[1].toFixed(2)}" data-r="${r}" data-rank="${i}">${esc(c.label.replace(/, [A-Z]{2}$/, ''))}</text>`;
-    }).join('');
+    cityLabelData = [
+      ...placed.map((c, i) => ({
+        x: c.xy[0], y: c.xy[1], radius: 3.5 + Math.sqrt(c.jobs.length) * 2, rank: i,
+        city: c.label, text: c.label.replace(/, [A-Z]{2}$/, ''), selected: sel?.type === 'city' && sel.key === c.label,
+      })),
+      ...major.map((c, i) => ({ x: c.xy[0], y: c.xy[1], radius: 1, rank: placed.length + i, text: c.name, major: true })),
+    ];
 
-    svg.innerHTML = `<g>${statePaths}</g>
+    const mapMarkup = `<g class="world-countries">${countryPaths}</g>
+      <g>${statePaths}</g>
       <path class="borders" d="${l.path(l.borders)}"/>
       <path class="nation" d="${l.path(l.nation)}"/>
       <g class="labels">${stateLabels}</g>${extra}
       <g>${[...placed].reverse().length ? dots : ''}</g>
-      <g class="labels">${labels}</g>`;
+      <g class="labels city-labels"></g>`;
+    svg.innerHTML = [-W, 0, W].map((shift) => {
+      const copyMarkup = shift ? mapMarkup.replace(/tabindex="0"/g, 'tabindex="-1"') : mapMarkup;
+      return `<g class="map-copy" data-shift="${shift}" transform="translate(${shift} 0)" ${shift ? 'aria-hidden="true" focusable="false"' : ''}>${copyMarkup}</g>`;
+    }).join('');
+    dotNodes = [...svg.querySelectorAll('.dot')];
+    pinNodes = [...svg.querySelectorAll('.pin')];
+    stateLabelNodes = [...svg.querySelectorAll('.st-label')];
+    cityLabelGroups = [...svg.querySelectorAll('.city-labels')];
+    cityLabelNodes = [];
+    cityLabelsVisible = false;
+    cityLabelViewKey = '';
+    selectedCityLabel = sel?.type === 'city' && cities.has(sel.key);
 
     // Re-fit only when the searched place (or the set of places) changes; keep the user's zoom otherwise.
     const fitKey = loc ? `${loc.lat},${loc.lon},${loc.radius}` : 'us';
@@ -216,13 +297,13 @@ export function render(el) {
     } else fitBox = null;
     if (fitKey !== lastFitKey) {
       lastFitKey = fitKey;
-      if (loc && fitBox) fitTo(fitBox, 0.3); else { vb = { x: 0, y: 0, w: W, h: H }; applyVb(); }
+      if (loc && fitBox) fitTo(fitBox, 0.3, loc.kind === 'point' && loc.radius !== 'state' ? 24 : 120); else fitTo(l.continentalBounds, 0.12);
     } else applyVb();
 
-    const unplaced = list.filter((j) => !(j.places || []).some(inside)).length;
-    $('.map-note', el).textContent = list.length
-      ? `${plural(cities.size, 'city', 'cities')} in ${plural(byState.size, 'state')}.${unplaced ? ` ${unplaced} of these ${list.length} postings are remote or name no US city${loc ? ' in this area' : ''}, so they aren't plotted.` : ''}`
-      : 'No postings match the filters.';
+    if (!list.length) {
+      note.textContent = 'No postings match the filters.';
+      note.hidden = false;
+    }
     drawSide();
   };
 
@@ -252,10 +333,16 @@ export function render(el) {
     if (dot) state.mapSel = { type: 'city', key: dot.dataset.city };
     else if (st) state.mapSel = { type: 'state', key: st.dataset.state };
     else return;
+    selectedCityLabel = Boolean(dot && cities.has(dot.dataset.city));
     for (const n of svg.querySelectorAll('.sel')) n.classList.remove('sel');
-    (dot || st).classList.add('sel');
-    if (dot) svg.querySelector(`.city-label[x="${dot.getAttribute('cx')}"]`)?.classList.add('sel');
-    rescale();
+    if (dot) {
+      const city = CSS.escape(dot.dataset.city);
+      svg.querySelectorAll(`[data-city="${city}"]`).forEach((n) => n.classList.add('sel'));
+    } else {
+      const stateCode = CSS.escape(st.dataset.state);
+      svg.querySelectorAll(`[data-state="${stateCode}"]`).forEach((n) => n.classList.add('sel'));
+    }
+    scheduleRescale();
     drawSide();
   };
 
@@ -305,6 +392,13 @@ export function render(el) {
   svg.addEventListener('pointercancel', endPointer);
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
+    const panX = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+    if (panX) {
+      const [, , s] = toSvg(e.clientX, e.clientY);
+      vb.x += panX / s;
+      applyVb();
+      return;
+    }
     const [sx, sy] = toSvg(e.clientX, e.clientY);
     zoomAt(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0018)), sx, sy);
   }, { passive: false });
@@ -317,8 +411,9 @@ export function render(el) {
     const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
     if (z === 'in') zoomAt(1.6, cx, cy);
     if (z === 'out') zoomAt(1 / 1.6, cx, cy);
-    if (z === 'fit') { if (fitBox) fitTo(fitBox, state.filters.loc ? 0.3 : 0.12); }
-    if (z === 'us') { vb = { x: 0, y: 0, w: W, h: H }; applyVb(); }
+    if (z === 'fit') { if (fitBox) fitTo(fitBox, state.filters.loc ? 0.3 : 0.12); else if (l) fitTo(l.continentalBounds, 0.12); }
+    if (z === 'us' && l) fitTo(l.continentalBounds, 0.12);
+    if (z === 'world' && l) fitTo(l.worldBounds, 0);
   });
   wrap.addEventListener('keydown', (e) => {
     if (e.target.closest('input, select, textarea')) return;
@@ -349,15 +444,17 @@ export function render(el) {
   svg.addEventListener('pointerleave', () => { tip.hidden = true; });
 
   side.addEventListener('click', (e) => {
-    if (e.target.closest('[data-clear-pick]')) { state.mapSel = null; for (const n of svg.querySelectorAll('.sel')) n.classList.remove('sel'); rescale(); drawSide(); return; }
+    if (e.target.closest('[data-clear-pick]')) { state.mapSel = null; selectedCityLabel = false; for (const n of svg.querySelectorAll('.sel')) n.classList.remove('sel'); scheduleRescale(); drawSide(); return; }
     const place = e.target.closest('[data-place]');
     if (place) {
       const c = cities.get(place.dataset.place);
       state.mapSel = { type: 'city', key: place.dataset.place };
-      if (c) { const [x, y] = l.projection([c.lon, c.lat]); fitTo([[x - 20, y - 12], [x + 20, y + 12]], 0.4); }
+      selectedCityLabel = Boolean(c);
+      if (c) { const [x, y] = l.projection([c.lon, c.lat]); fitTo([[x - 20, y - 12], [x + 20, y + 12]], 0.4, 24); }
       for (const n of svg.querySelectorAll('.sel')) n.classList.remove('sel');
-      svg.querySelector(`.dot[data-city="${CSS.escape(place.dataset.place)}"]`)?.classList.add('sel');
-      rescale(); drawSide();
+      const city = CSS.escape(place.dataset.place);
+      svg.querySelectorAll(`.dot[data-city="${city}"], .city-label[data-city="${city}"]`).forEach((n) => n.classList.add('sel'));
+      scheduleRescale(); drawSide();
       return;
     }
     const li = e.target.closest('.job');
@@ -368,7 +465,7 @@ export function render(el) {
   drawRail();
   draw();
   const offs = [on('jobs', () => { drawRail(); draw(); }), on('loading', () => { if (!state.jobs.length) draw(); })];
-  const ro = new ResizeObserver(() => rescale());
+  const ro = new ResizeObserver(() => scheduleRescale());
   ro.observe(svg);
-  return { destroy: () => { offs.forEach((off) => off()); ro.disconnect(); } };
+  return { destroy: () => { offs.forEach((off) => off()); ro.disconnect(); if (rescaleFrame) cancelAnimationFrame(rescaleFrame); } };
 }

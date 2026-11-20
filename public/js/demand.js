@@ -22,6 +22,16 @@ export const CERTS = [
   ['Apple ACSP', /\b(acsp|apple certified support professional)\b/i],
   ['HDI Support Center Analyst', /\bhdi\b/i],
   ['CISSP', /\bcissp\b/i],
+  ['CPA', /\bcertified public accountant\b|\bCPA\b/i],
+  ['CMA', /\bcertified management accountant\b|\bCMA\b/i],
+  ['CFA', /\bchartered financial analyst\b|\bCFA\b/i],
+  ['PMP', /\bproject management professional\b|\bPMP\b/i],
+  ['SHRM-CP / SHRM-SCP', /\bSHRM-(CP|SCP)\b|\bSHRM certified\b/i],
+  ['Professional Engineer (PE)', /\bprofessional engineer\b|\bPE license\b/i],
+  ['Six Sigma', /\bsix sigma\b/i],
+  ['OSHA 10 / 30', /\bOSHA[- ]?(10|30)\b/i],
+  ['BLS / CPR', /\b(BLS|CPR) certification\b/i],
+  ['RN license / NCLEX', /\b(NCLEX|registered nurse license|RN license)\b/i],
 ];
 
 export function demandFor(jobs, resumeText = '') {

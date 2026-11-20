@@ -37,6 +37,22 @@ export function updateTitle() {
 }
 
 let inflight = null;
+const jobKey = (j) => `${j.title}|${j.company}`.toLowerCase().replace(/[^a-z0-9|]+/g, '');
+
+export function addImportedJob(job) {
+  const key = jobKey(job);
+  const existing = state.jobs.find((j) => j.id === job.id || jobKey(j) === key);
+  if (existing) return existing;
+  state.importedJobs = [job, ...state.importedJobs.filter((j) => j.id !== job.id)].slice(0, 100);
+  store.set('importedJobs', state.importedJobs);
+  const known = new Set(store.get('knownIds', []));
+  known.add(job.id);
+  store.set('knownIds', [...known].slice(-6000));
+  state.jobs = [job, ...state.jobs];
+  emit('jobs');
+  return job;
+}
+
 export async function loadJobs({ force = false, silent = false } = {}) {
   if (inflight) return inflight;
   state.loading = true;
@@ -45,7 +61,10 @@ export async function loadJobs({ force = false, silent = false } = {}) {
     try {
       const data = await api('/api/jobs', { settings: jobSettings(), force });
       for (const j of data.jobs) if (state.fullText[j.id]) applyFullText(j, state.fullText[j.id]);
-      state.jobs = data.jobs;
+      const ids = new Set(data.jobs.map((j) => j.id));
+      const keys = new Set(data.jobs.map(jobKey));
+      const imported = state.importedJobs.filter((j) => !ids.has(j.id) && !keys.has(jobKey(j)));
+      state.jobs = [...data.jobs, ...imported].sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''));
       state.sources = data.sources;
       state.lastLoaded = Date.now();
       state.loadError = '';

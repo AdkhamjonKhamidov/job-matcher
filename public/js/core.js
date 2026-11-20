@@ -16,11 +16,30 @@ export const store = {
 export const CATS = [
   ['helpdesk', 'Helpdesk & Support'], ['it', 'IT & Sysadmin'], ['swe', 'Software'], ['devops', 'DevOps & Cloud'],
   ['security', 'Security'], ['data', 'Data & ML'], ['qa', 'QA & Test'],
+  ['nursing', 'Nursing & Clinical'], ['allied-health', 'Allied Health'], ['pharmacy-tech', 'Pharmacy Technician'], ['pharmacy', 'Pharmacist & Pharmacy'], ['hospital-data-entry', 'Hospital Data Entry & Records'], ['residency', 'Residency & Fellowship'], ['clinical-research', 'Clinical Research'], ['research-assistant', 'Research Assistant'], ['healthcare', 'Healthcare Support'], ['healthcare-admin', 'Healthcare Administration'], ['medical-lab', 'Medical & Lab'],
+  ['education', 'Teaching & Education'], ['academic-support', 'Higher Education & Student Services'], ['social-services', 'Social Work & Community Services'],
+  ['legal', 'Legal & Paralegal'], ['public-policy', 'Public Policy & Government Relations'],
+  ['architecture', 'Architecture & Planning'], ['design', 'UX, Product & Visual Design'], ['communications', 'Communications & Writing'],
+  ['civil-engineering', 'Civil & Structural'], ['mechanical-engineering', 'Mechanical & Aerospace'], ['electrical-engineering', 'Electrical & Controls'], ['biomedical-engineering', 'Biomedical & Medical Devices'], ['manufacturing-engineering', 'Manufacturing & Quality'], ['environmental-science', 'Environmental & Chemical'], ['science', 'Science & Research'], ['engineering', 'Other Engineering'],
+  ['accounting', 'Accounting & Bookkeeping'], ['audit-tax', 'Audit & Tax'], ['finance', 'Finance & Banking'], ['payroll', 'Payroll'],
+  ['business', 'Business Analysis'], ['operations', 'Operations'], ['project-management', 'Project Management'], ['human-resources', 'HR & Recruiting'], ['sales', 'Sales'], ['marketing', 'Marketing'], ['customer-service', 'Customer Service'],
 ];
 export const CAT_LABEL = Object.fromEntries(CATS);
+export const CAREER_FIELDS = [
+  { id: 'technology', label: 'Technology', roles: ['helpdesk', 'it', 'swe', 'devops', 'security', 'data', 'qa'] },
+  { id: 'healthcare', label: 'Healthcare', roles: ['nursing', 'allied-health', 'pharmacy-tech', 'pharmacy', 'hospital-data-entry', 'residency', 'clinical-research', 'healthcare', 'healthcare-admin', 'medical-lab'] },
+  { id: 'education', label: 'Education & social services', roles: ['education', 'academic-support', 'social-services'] },
+  { id: 'legal', label: 'Legal & public policy', roles: ['legal', 'public-policy'] },
+  { id: 'design', label: 'Architecture & design', roles: ['architecture', 'design'] },
+  { id: 'engineering', label: 'Engineering & science', roles: ['civil-engineering', 'mechanical-engineering', 'electrical-engineering', 'biomedical-engineering', 'manufacturing-engineering', 'environmental-science', 'science', 'research-assistant', 'engineering'] },
+  { id: 'finance', label: 'Accounting & finance', roles: ['accounting', 'audit-tax', 'finance', 'payroll'] },
+  { id: 'business', label: 'Business & operations', roles: ['business', 'operations', 'project-management', 'human-resources', 'sales', 'marketing', 'communications', 'customer-service'] },
+];
 export const LEVELS = [['intern', 'Internship'], ['entry', 'Entry'], ['mid', 'Mid'], ['senior', 'Senior']];
+const savedApplications = store.get('applications', []);
 
 const DEFAULT_SETTINGS = {
+  aiProvider: 'gemini', aiKeys: { gemini: '', openai: '', anthropic: '' },
   geminiKey: '', model: 'auto', tone: 'professional and direct', maskContact: true, notes: '',
   profile: { name: '', email: '', phone: '', linkedin: '' },
   city: '', radius: 25, country: 'us', adzuna: { appId: '', appKey: '' },
@@ -29,13 +48,16 @@ const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_FILTERS = {
-  days: 7, roles: [], levels: ['intern', 'entry'], where: 'all', loc: null, locRemote: true,
+  days: 7, roles: [], levels: ['intern', 'entry'], where: 'all', loc: null, locRemote: false, locRemoteExplicit: false,
   regionOnly: true, hasEmail: false, hideSeen: true, sort: 'new',
   eligibleOnly: true, publicOlder: true,
 };
 
 function loadSettings() {
   const s = { ...DEFAULT_SETTINGS, ...store.get('settings', {}) };
+  s.aiProvider = ['gemini', 'openai', 'anthropic'].includes(s.aiProvider) ? s.aiProvider : 'gemini';
+  s.aiKeys = { ...DEFAULT_SETTINGS.aiKeys, ...(s.aiKeys || {}) };
+  s.aiKeys.gemini ||= s.geminiKey || '';
   s.profile = { ...DEFAULT_SETTINGS.profile, ...(s.profile || {}) };
   s.adzuna = { ...DEFAULT_SETTINGS.adzuna, ...(s.adzuna || {}) };
   if (!s.model || s.model === 'gemini-2.5-flash') s.model = 'auto'; // retired for new keys
@@ -45,6 +67,7 @@ function loadSettings() {
 function loadFilters() {
   const saved = store.get('filters', null);
   const f = { ...DEFAULT_FILTERS, ...(saved || {}), q: '' };
+  if (saved?.locRemote === true && !saved.locRemoteExplicit) f.locRemote = false;
   if (!saved) {
     // Carry over choices from the older single-page version.
     const old = store.get('settings', {});
@@ -60,6 +83,8 @@ export const state = {
   filters: loadFilters(),
   resumes: store.get('resumes', []), // [{id, name, text, updatedAt}]
   activeResume: store.get('activeResume', null),
+  importedJobs: store.get('importedJobs', []),
+  applications: Array.isArray(savedApplications) ? savedApplications : [],
   dismissed: new Set(store.get('dismissed', [])),
   kits: store.get('kits', {}), // jobId -> {kit, at, resumeId, resumeName, job, edits, to}
   onboarded: store.get('onboarded', false),
@@ -87,6 +112,8 @@ export function eligibility(j, auth = state.settings.workAuth) {
 
 export const saveSettings = () => store.set('settings', state.settings);
 export const saveFilters = () => { const { q, ...rest } = state.filters; store.set('filters', rest); };
+export const activeAIProvider = () => state.settings.aiProvider || 'gemini';
+export const activeAIKey = () => state.settings.aiKeys?.[activeAIProvider()] || (activeAIProvider() === 'gemini' ? state.settings.geminiKey : '');
 export const currentResume = () => state.resumes.find((r) => r.id === state.activeResume) || state.resumes[0] || null;
 export const findJob = (id) => state.jobs.find((j) => j.id === id) || state.kits[id]?.job || null;
 
@@ -140,9 +167,9 @@ export async function copy(text, okMsg = 'Copied.') {
   try { await navigator.clipboard.writeText(text); toast(okMsg); return true; } catch { toast('Clipboard blocked. Select the text and copy it manually.'); return false; }
 }
 
-export function download(name, text) {
+export function download(name, text, type = 'text/plain;charset=utf-8') {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);

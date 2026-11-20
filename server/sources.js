@@ -128,23 +128,23 @@ export const SOURCES = [
   },
   {
     id: 'adzuna', name: 'Adzuna (local)', home: 'https://www.adzuna.com', kind: 'local', ttl: HOUR,
-    needs: 'Free Adzuna app ID and key in Settings',
+    needs: 'Optional Adzuna account setup in Settings',
     enabled: (s) => !!(s.adzuna?.appId && s.adzuna?.appKey),
-    cacheKey: ({ adzuna, maxAgeDays }) => [adzuna.country, adzuna.where, adzuna.distanceMiles, maxAgeDays, adzuna.appId].join('|'),
+    cacheKey: ({ adzuna, maxAgeDays }) => ['all', adzuna.country, adzuna.where, adzuna.distanceMiles, maxAgeDays, adzuna.appId].join('|'),
     async fetch({ adzuna, maxAgeDays }) {
       const country = (adzuna.country || 'us').toLowerCase();
       const out = [];
-      // Two passes: newest IT jobs, then a search aimed at entry-level titles.
+      // Fetch all occupational categories; title classification keeps unrelated roles out of the feed.
       const passes = [
         ...[1, 2, 3].map((page) => ({ page })),
-        ...[1, 2].map((page) => ({ page, what_or: 'junior entry graduate trainee apprentice associate intern tier1 helpdesk technician' })),
+        ...[1, 2].map((page) => ({ page, what_or: 'junior entry graduate trainee apprentice associate intern student assistant' })),
       ];
       const exhausted = new Set();
       for (const { page, what_or } of passes) {
         if (exhausted.has(what_or || '')) continue;
         const p = new URLSearchParams({
           app_id: adzuna.appId, app_key: adzuna.appKey, results_per_page: '50',
-          category: 'it-jobs', sort_by: 'date', max_days_old: String(maxAgeDays), 'content-type': 'application/json',
+          sort_by: 'date', max_days_old: String(maxAgeDays), 'content-type': 'application/json',
         });
         if (what_or) p.set('what_or', what_or);
         if (adzuna.where) {

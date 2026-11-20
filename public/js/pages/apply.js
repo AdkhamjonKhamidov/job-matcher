@@ -1,5 +1,5 @@
-// /apply/:id  -  tailor with Gemini, edit the documents, then send.
-import { state, $, esc, safeUrl, on, emit, api, toast, copy, download, fileSlug, saveKits, currentResume, findJob, store, WORK_AUTH } from '../core.js';
+// /apply/:id - tailor with the selected AI provider, edit the documents, then send.
+import { state, $, esc, safeUrl, on, emit, api, toast, copy, download, fileSlug, saveKits, currentResume, findJob, store, WORK_AUTH, activeAIKey, activeAIProvider } from '../core.js';
 import { loadFullText } from '../data.js';
 import { maskText, unmask, printDoc, renderMarkdown } from '../docs.js';
 
@@ -61,21 +61,22 @@ export function render(el, id) {
 
   const startView = (j) => {
     const s = state.settings;
-    const hasKey = !!(s.geminiKey || state.config?.serverGeminiKey);
+    const provider = activeAIProvider();
+    const hasKey = !!(activeAIKey() || state.config?.serverAiProviders?.[provider]);
     const r = currentResume();
     const ready = hasKey && r;
     return `
       <div class="card start">
         <h2>Build your apply kit</h2>
-        <p class="muted">Gemini rewrites your resume for this posting using only what's already in it, then drafts a cover letter, a recruiter email, LinkedIn messages and likely screening questions. It takes 15 to 60 seconds.</p>
+        <p class="muted">Your selected AI provider tailors your resume using only what's already in it, then drafts a cover letter, recruiter email, LinkedIn messages and likely screening questions. It may take up to a minute.</p>
         <ul class="checklist">
           <li class="${r ? 'ok' : ''}">${r ? `Resume: <b>${esc(r.name)}</b>` : 'No resume yet'} ${r ? '' : '<a class="btn ghost small" href="/resume" data-link>Add resume</a>'}</li>
-          <li class="${hasKey ? 'ok' : ''}">${hasKey ? 'Gemini key is set' : 'No Gemini key yet'} ${hasKey ? '' : '<a class="btn ghost small" href="/settings#gemini" data-link>Add key</a>'}</li>
+          <li class="${hasKey ? 'ok' : ''}">${hasKey ? 'AI writing is ready' : 'AI writing is optional'} ${hasKey ? '' : '<a class="btn ghost small" href="/settings#gemini" data-link>Set up AI writing</a>'}</li>
           ${s.profile?.name ? '' : '<li class="opt">Optional: add your name in <a href="/settings" data-link>Settings</a> for email signatures</li>'}
         </ul>
         ${state.resumes.length > 1 ? `<label class="field"><span>Resume to use</span><select data-pick-resume>${state.resumes.map((x) => `<option value="${esc(x.id)}" ${x.id === r?.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
-        <label class="field"><span>Anything Gemini should know for this job? (optional)</span><textarea data-job-notes rows="2" placeholder="e.g. I used their product at my last job."></textarea></label>
-        <button class="btn accent big" type="button" data-act="tailor" ${ready ? '' : 'disabled'}>Tailor with Gemini</button>
+        <label class="field"><span>Anything the AI should know for this job? (optional)</span><textarea data-job-notes rows="2" placeholder="e.g. I used their product at my last job."></textarea></label>
+        <button class="btn accent big" type="button" data-act="tailor" ${ready ? '' : 'disabled'}>Tailor with ${esc(state.settings.aiProvider === 'openai' ? 'GPT' : state.settings.aiProvider === 'anthropic' ? 'Claude' : 'Gemini')}</button>
       </div>`;
   };
 
@@ -83,7 +84,7 @@ export function render(el, id) {
     <div class="card start">
       <h2>Tailoring for ${esc(j.company || j.title)}</h2>
       <div class="loading-bar"></div>
-      <p class="muted">Reading the posting and your resume. If the newest Gemini model is busy it moves to the next one automatically.</p>
+      <p class="muted">Reading the posting and your resume. If the selected model is busy, another available model may be tried.</p>
     </div>`;
 
   const kitView = (j, entry) => {
@@ -106,7 +107,7 @@ export function render(el, id) {
                 <b>Apply on the company site</b>
                 <p>Save the resume as PDF, then open the form. The cover letter is copied so you can paste it.</p>
                 <div class="row"><button class="btn ghost small" type="button" data-act="pdf" data-doc="resume">Save resume PDF</button>
-                <a class="btn small" href="${safeUrl(j.applyUrl)}" target="_blank" rel="noopener noreferrer" data-act="applyCopy">Open application</a></div>
+                ${j.applyUrl ? `<a class="btn small" href="${safeUrl(j.applyUrl)}" target="_blank" rel="noopener noreferrer" data-act="applyCopy" data-apply-link="${esc(j.id)}">Open application</a>` : ''}</div>
               </li>
               <li>
                 <b>Email the recruiter</b>
@@ -159,10 +160,10 @@ export function render(el, id) {
     state.tailoring.add(id);
     draw();
     try {
-      // Gemini needs the real posting, not just a title from a list.
+      // The selected provider needs the real posting, not just a title from a list.
       await loadFullText(j).catch(() => toast('Could not load the full posting; tailoring from the summary only.'));
       const kit = await api('/api/tailor', {
-        apiKey: state.settings.geminiKey, model: state.settings.model, tone: state.settings.tone, notes, resumeText: text,
+        provider: activeAIProvider(), apiKey: activeAIKey(), model: state.settings.model, tone: state.settings.tone, notes, resumeText: text,
         job: { title: j.title, company: j.company, location: j.location, salary: j.salary, description: j.description, descriptionIsSnippet: j.descriptionIsSnippet },
       });
       kit.matchScore = Math.max(0, Math.min(100, Math.round(Number(kit.matchScore) || 0)));

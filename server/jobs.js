@@ -3,8 +3,8 @@ import { categorize, seniority, extractEmails, ageDays, requiredYears, entryHint
 import { parseLocation, geocode } from './geo.js';
 
 export const DEFAULT_BOARDS = {
-  greenhouse: ['cloudflare', 'gitlab', 'datadog', 'airbnb', 'figma', 'discord'],
-  lever: ['palantir', 'plaid'],
+  greenhouse: ['cloudflare', 'gitlab', 'datadog', 'airbnb', 'figma', 'discord', 'mavenclinic', 'stripe'],
+  lever: ['palantir', 'plaid', 'lyrahealth', 'wealthfront'],
   ashby: ['ramp', 'notion', 'linear', 'zapier'],
 };
 

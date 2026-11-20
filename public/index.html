@@ -17,11 +17,16 @@
       <img class="brand-mark" src="/logo.svg" alt="" width="36" height="36">
       <span class="brand-name">Job Matcher</span>
     </a>
-    <nav class="nav" aria-label="Main">
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="primaryNav">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Menu</span>
+    </button>
+    <nav class="nav" id="primaryNav" aria-label="Main">
       <a href="/" data-nav="jobs">Jobs</a>
       <a href="/map" data-nav="map">Map</a>
       <a href="/applications" data-nav="applications"><span class="long">Applications</span><span class="short">Applied</span> <span class="nav-count" id="navKits" hidden></span></a>
       <a href="/grow" data-nav="grow">Grow</a>
+      <a href="/sources" data-nav="sources"><span class="long">Career sources</span><span class="short">Sources</span></a>
       <a href="/resume" data-nav="resume">Resume</a>
       <a href="/settings" data-nav="settings" aria-label="Settings"><span class="long">Settings</span><svg class="short" viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg></a>
     </nav>
@@ -34,9 +39,22 @@
   <main id="view" tabindex="-1"></main>
 
   <footer class="privacy">
-    <p id="privacyNote"><b>Private by design.</b> No accounts, analytics, cookies or remote assets. Your resume stays in this browser. Only two things leave your computer: requests to the job sites listed in Settings, and the job + resume text sent to Gemini when you tailor (contact details masked first).</p>
+    <p id="privacyNote"><b>Private by design.</b> No accounts, analytics, cookies or remote assets. Your resume and application tracker stay in this browser. Requests go to the job sites listed in Settings; resume and job text are sent to your selected AI provider only when you choose AI writing (contact details masked first).</p>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="applicationPrompt" class="application-prompt" aria-labelledby="applicationPromptTitle">
+    <form method="dialog">
+      <p class="eyebrow">Application tracker</p>
+      <h2 id="applicationPromptTitle">Did you finish applying?</h2>
+      <p data-prompt-job></p>
+      <p class="muted small">Your answer and application details stay in this browser.</p>
+      <div class="prompt-actions">
+        <button class="btn accent" value="applied">Yes, mark as applied</button>
+        <button class="btn ghost" value="in_progress">Not yet, keep tracking</button>
+        <button class="linkish" value="later">Ask me later</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

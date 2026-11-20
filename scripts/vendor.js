@@ -15,7 +15,8 @@ const FILES = [
   ['d3-array/dist/d3-array.min.js', 'd3/d3-array.min.js'],
   ['d3-geo/dist/d3-geo.min.js', 'd3/d3-geo.min.js'],
   ['topojson-client/dist/topojson-client.min.js', 'topojson/topojson-client.min.js'],
-  ['us-atlas/states-albers-10m.json', 'us-atlas/states-albers-10m.json'],
+  ['us-atlas/states-10m.json', 'us-atlas/states-10m.json'],
+  ['world-atlas/countries-110m.json', 'world-atlas/countries-110m.json'],
   ...['400', '500', '800', '900'].map((w) => [`@fontsource/archivo/files/archivo-latin-${w}-normal.woff2`, `fonts/archivo/files/archivo-latin-${w}-normal.woff2`]),
   ...['400', '500'].map((w) => [`@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-${w}-normal.woff2`, `fonts/ibm-plex-mono/files/ibm-plex-mono-latin-${w}-normal.woff2`]),
 ];

@@ -39,7 +39,7 @@ export function render(el) {
       <div class="page page-narrow">
         <header class="page-head">
           <h1>Resume</h1>
-          <p class="muted">Keep one version per track (for example helpdesk and software) and pick which one Gemini uses. Files are read in this browser; only the text is saved, never the file.</p>
+          <p class="muted">Keep one version per track (for example healthcare and engineering) and pick which one your AI provider uses. Files are read in this browser; only the text is saved, never the file.</p>
         </header>
         ${state.resumes.length ? `<div class="resume-tabs" role="tablist" aria-label="Your resumes">
           ${state.resumes.map((x) => `<button type="button" role="tab" data-res="${esc(x.id)}" aria-selected="${x.id === r?.id}">${esc(x.name)}${x.id === r?.id ? ' <span class="badge">in use</span>' : ''}</button>`).join('')}

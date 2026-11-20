@@ -47,7 +47,7 @@ export function postingDetail(j, { back = null } = {}) {
       <p class="meta">Posted ${a.big}${a.small === 'ago' ? ' ago' : ` (${a.small})`}, ${esc(posted)} · via <a href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">${esc(j.sourceName || 'source')}</a></p>
       <div class="d-actions">
         <a class="btn accent" href="/apply/${encodeURIComponent(j.id)}" data-link>${kit ? `Open apply kit (match ${kit.kit.matchScore})` : 'Tailor and apply'}</a>
-        <a class="btn ghost" href="${safeUrl(j.applyUrl)}" target="_blank" rel="noopener noreferrer">Company page</a>
+      ${j.applyUrl ? `<a class="btn ghost" href="${safeUrl(j.applyUrl)}" target="_blank" rel="noopener noreferrer" data-apply-link="${esc(j.id)}">Company page</a>` : ''}
         <button class="btn ghost" type="button" data-act="dismiss">${state.dismissed.has(j.id) ? 'Restore' : 'Dismiss'}</button>
       </div>
     </div>
